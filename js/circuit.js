@@ -1,3 +1,8 @@
+import {
+  componentGridSize,
+  rotatedTerminalLayout
+} from "./simulation.js";
+
 const GRID_SIZE = 24;
 
 const byId = (id) => document.getElementById(id);
@@ -62,10 +67,11 @@ export class CircuitEditor {
     return Math.max(0, Math.round(value / GRID_SIZE) * GRID_SIZE);
   }
 
-  clampPosition(definition, x, y) {
+  clampPosition(definition, x, y, rotation = 0) {
+    const size = componentGridSize(definition, rotation);
     return {
-      x: Math.min(this.snap(x), Math.max(0, this.board.clientWidth - definition.gridSize.width * GRID_SIZE)),
-      y: Math.min(this.snap(y), Math.max(0, this.board.clientHeight - definition.gridSize.height * GRID_SIZE))
+      x: Math.min(this.snap(x), Math.max(0, this.board.clientWidth - size.width * GRID_SIZE)),
+      y: Math.min(this.snap(y), Math.max(0, this.board.clientHeight - size.height * GRID_SIZE))
     };
   }
 
@@ -88,21 +94,22 @@ export class CircuitEditor {
       state.energyWh = definition.model.capacityWh * definition.model.startingStateOfCharge;
       state.stateOfCharge = definition.model.startingStateOfCharge;
     }
-    this.circuit.components.push({ id, componentId, ...position, state });
+    this.circuit.components.push({ id, componentId, rotation: 0, ...position, state });
     this.select({ type: "component", id });
     this.commit();
   }
 
   componentElement(component) {
     const definition = this.definitions.get(component.componentId);
+    const size = componentGridSize(definition, component.rotation ?? 0);
     const element = document.createElement("div");
-    element.className = "circuit-component";
+    element.className = `circuit-component ${definition.model.type}-component`;
     element.dataset.id = component.id;
     element.tabIndex = 0;
     element.style.left = `${component.x}px`;
     element.style.top = `${component.y}px`;
-    element.style.width = `${definition.gridSize.width * GRID_SIZE}px`;
-    element.style.height = `${definition.gridSize.height * GRID_SIZE}px`;
+    element.style.width = `${size.width * GRID_SIZE}px`;
+    element.style.height = `${size.height * GRID_SIZE}px`;
     if (this.selection?.type === "component" && this.selection.id === component.id) element.classList.add("selected");
     if (this.hazardComponentIds().has(component.id)) element.classList.add("hazard");
 
@@ -117,7 +124,9 @@ export class CircuitEditor {
     if (definition.model.type === "battery") {
       readings.push(`${Math.round((component.state?.stateOfCharge ?? 0) * 100)}%`);
     }
-    readings.push(`${(component.state?.temperatureC ?? this.getAmbientTemperature()).toFixed(1)} °C`);
+    if (definition.model.type !== "load") {
+      readings.push(`${(component.state?.temperatureC ?? this.getAmbientTemperature()).toFixed(1)} °C`);
+    }
     reading.textContent = readings.join(" • ");
     element.append(reading);
 
@@ -129,8 +138,13 @@ export class CircuitEditor {
       button.dataset.terminalId = terminal.id;
       button.dataset.role = terminal.role;
       button.dataset.domain = terminal.domain;
-      button.dataset.edge = terminal.edge;
-      button.style.top = `${terminal.offset * 100}%`;
+      const layout = rotatedTerminalLayout(
+        definition,
+        terminal,
+        component.rotation ?? 0
+      );
+      button.style.left = `${layout.x / layout.width * 100}%`;
+      button.style.top = `${layout.y / layout.height * 100}%`;
       button.textContent = terminal.label;
       button.title = `${terminal.label} terminal`;
       button.addEventListener("pointerdown", (event) => this.startWire(event, component.id, terminal.id));
@@ -145,20 +159,34 @@ export class CircuitEditor {
       event.stopPropagation();
       this.select({ type: "component", id: component.id });
     });
-    element.addEventListener("mouseenter", (event) => this.showTooltip(event, definition));
+    element.addEventListener("mouseenter", (event) => this.showTooltip(event, definition, component));
     element.addEventListener("mousemove", (event) => this.moveTooltip(event));
     element.addEventListener("mouseleave", () => this.hideTooltip());
-    element.addEventListener("focus", (event) => this.showTooltip(event, definition));
+    element.addEventListener("focus", (event) => this.showTooltip(event, definition, component));
     element.addEventListener("blur", () => this.hideTooltip());
     return element;
   }
 
-  showTooltip(event, definition) {
+  showTooltip(event, definition, component) {
     const tooltip = byId("tooltip");
+    const metrics = this.report.componentMetrics?.[component.id] ?? component.state ?? {};
+    const liveReadings = [
+      ["Temperature", `${(component.state?.temperatureC ?? this.getAmbientTemperature()).toFixed(1)} °C`],
+      ["Current power", `${(metrics.powerWatts ?? 0).toFixed(1)} W`]
+    ];
+    if (definition.model.type === "battery") {
+      liveReadings.push(
+        ["Charge", `${((component.state?.stateOfCharge ?? 0) * 100).toFixed(1)}%`],
+        ["Current voltage", `${(metrics.voltageVolts ?? definition.model.voltage).toFixed(2)} V`]
+      );
+    }
+    const readings = liveReadings
+      .map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`)
+      .join("");
     const specifications = Object.entries(definition.specifications)
       .map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`)
       .join("");
-    tooltip.innerHTML = `<h3>${definition.name}</h3><p>${definition.description}</p><dl>${specifications}</dl>`;
+    tooltip.innerHTML = `<h3>${definition.name}</h3><p>${definition.description}</p><dl>${readings}${specifications}</dl>`;
     tooltip.hidden = false;
     this.moveTooltip(event);
   }
@@ -211,7 +239,8 @@ export class CircuitEditor {
       const position = this.clampPosition(
         definition,
         this.drag.originalX + event.clientX - this.drag.startX,
-        this.drag.originalY + event.clientY - this.drag.startY
+        this.drag.originalY + event.clientY - this.drag.startY,
+        component.rotation ?? 0
       );
       if (position.x !== component.x || position.y !== component.y) this.drag.moved = true;
       Object.assign(component, position);
@@ -362,6 +391,30 @@ export class CircuitEditor {
     }
     this.selection = null;
     this.onSelectionChange(null);
+    this.commit();
+  }
+
+  rotateSelection() {
+    if (this.selection?.type !== "component") return;
+    const component = this.circuit.components.find(
+      ({ id }) => id === this.selection.id
+    );
+    if (!component) return;
+    const definition = this.definitions.get(component.componentId);
+    const oldSize = componentGridSize(definition, component.rotation ?? 0);
+    const centerX = component.x + oldSize.width * GRID_SIZE / 2;
+    const centerY = component.y + oldSize.height * GRID_SIZE / 2;
+    component.rotation = ((component.rotation ?? 0) + 90) % 360;
+    const newSize = componentGridSize(definition, component.rotation);
+    Object.assign(
+      component,
+      this.clampPosition(
+        definition,
+        centerX - newSize.width * GRID_SIZE / 2,
+        centerY - newSize.height * GRID_SIZE / 2,
+        component.rotation
+      )
+    );
     this.commit();
   }
 

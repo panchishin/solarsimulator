@@ -11,7 +11,7 @@
       "group": "battery",
       "name": "12V 100Ah Battery",
       "description": "A compact battery for a 12 volt home power system.",
-      "gridSize": { "width": 4, "height": 3 },
+      "gridSize": { "width": 5, "height": 3 },
       "specifications": {
         "Voltage": "12 V DC",
         "Capacity": "100 Ah / 1,200 Wh",
@@ -46,7 +46,7 @@
       "group": "battery",
       "name": "12V 200Ah Battery",
       "description": "A higher-capacity battery for a 12 volt home power system.",
-      "gridSize": { "width": 4, "height": 3 },
+      "gridSize": { "width": 5, "height": 3 },
       "specifications": {
         "Voltage": "12 V DC",
         "Capacity": "200 Ah / 2,400 Wh",
@@ -335,7 +335,7 @@
       "group": "load",
       "name": "1200W Hair Dryer",
       "description": "A high-power 120 volt resistive household load.",
-      "gridSize": { "width": 4, "height": 3 },
+      "gridSize": { "width": 5, "height": 3 },
       "specifications": {
         "Supply": "120 V AC",
         "Power": "1,200 W",
@@ -360,7 +360,7 @@
       "group": "load",
       "name": "400W Fridge",
       "description": "A simplified continuous 400 watt refrigerator load.",
-      "gridSize": { "width": 4, "height": 4 },
+      "gridSize": { "width": 5, "height": 4 },
       "specifications": {
         "Supply": "120 V AC",
         "Power": "400 W continuous equivalent",

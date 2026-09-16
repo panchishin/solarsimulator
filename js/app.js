@@ -164,6 +164,7 @@ function onCircuitChange(circuit) {
 function onSelectionChange(selection) {
   const label = byId("selection-label");
   byId("delete-button").disabled = !selection;
+  byId("rotate-button").disabled = selection?.type !== "component";
   if (!selection) {
     label.textContent = "Nothing selected";
     return;
@@ -354,6 +355,7 @@ function bindControls() {
   });
   byId("undo-button").addEventListener("click", () => restoreHistory(historyIndex - 1));
   byId("redo-button").addEventListener("click", () => restoreHistory(historyIndex + 1));
+  byId("rotate-button").addEventListener("click", () => editor.rotateSelection());
   byId("delete-button").addEventListener("click", () => editor.deleteSelection());
   byId("clear-button").addEventListener("click", () => {
     if (currentLayout().circuit.components.length) {
@@ -369,6 +371,9 @@ function bindControls() {
     } else if (event.key === "Escape") {
       editor.cancelPointerAction();
       editor.select(null);
+    } else if (event.key.toLowerCase() === "r") {
+      event.preventDefault();
+      editor.rotateSelection();
     } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
       event.preventDefault();
       restoreHistory(historyIndex + (event.shiftKey ? 1 : -1));

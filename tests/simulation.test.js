@@ -4,11 +4,13 @@ import { readFile } from "node:fs/promises";
 import {
   buildNetlist,
   calculateTemperature,
+  componentGridSize,
   createComponentState,
   createWireState,
   evaluateCircuit,
   findCoolingCoefficient,
   resetSimulation,
+  rotatedTerminalLayout,
   simulateTick,
   wirePhysicalProperties
 } from "../js/simulation.js";
@@ -80,6 +82,15 @@ test("components begin at ambient temperature and a battery begins at 80 percent
   assert.equal(createComponentState(inverterDefinition, 15).temperatureC, 15);
 });
 
+test("battery metrics include solved terminal voltage", () => {
+  const battery = component("battery", batteryDefinition);
+  const result = evaluateCircuit(snapshot([battery], []));
+  const metrics = result.componentMetrics.get(battery.id);
+
+  assert.ok(Number.isFinite(metrics.voltageVolts));
+  assert.ok(Math.abs(metrics.voltageVolts - 12.6) < 1e-9);
+});
+
 test("catalog includes the requested battery and inverter variants", () => {
   const batteries = catalog.components
     .filter(({ group }) => group === "battery")
@@ -126,6 +137,46 @@ test("wire physical properties derive from Manhattan grid length", () => {
   ) < 1e-12);
   assert.ok(properties.massKg > 0);
   assert.equal(createWireState(catalog, components, connection, 18).temperatureC, 18);
+});
+
+test("rotation swaps component dimensions and rotates terminals without changing text state", () => {
+  const positiveTerminal = batteryDefinition.terminals.find(
+    ({ id }) => id === "positive"
+  );
+  const rotatedSize = componentGridSize(batteryDefinition, 90);
+  const rotatedTerminal = rotatedTerminalLayout(
+    batteryDefinition,
+    positiveTerminal,
+    90
+  );
+
+  assert.deepEqual(rotatedSize, { width: 3, height: 4 });
+  assert.ok(Math.abs(rotatedTerminal.x - 2.1) < 1e-9);
+  assert.equal(rotatedTerminal.y, 4);
+
+  const battery = component("battery", batteryDefinition, 0, 0);
+  const inverter = component("inverter", inverterDefinition, 240, 96);
+  const connection = wire(
+    "wire",
+    "battery",
+    "positive",
+    "inverter",
+    "dc-positive"
+  );
+  const originalLength = wirePhysicalProperties(
+    catalog,
+    [battery, inverter],
+    connection
+  ).lengthMeters;
+  battery.rotation = 90;
+  const rotatedLength = wirePhysicalProperties(
+    catalog,
+    [battery, inverter],
+    connection
+  ).lengthMeters;
+
+  assert.notEqual(rotatedLength, originalLength);
+  assert.equal(battery.state.temperatureC, 20);
 });
 
 test("cooling is scaled by simulated minutes and does not cross ambient", () => {
@@ -356,9 +407,9 @@ test("reversed inverter polarity is allowed and reported as a hazard", () => {
 });
 
 test("an incompatible source voltage reports a mismatch", () => {
-  const incompatibleCatalog = structuredClone(catalog);
-  const incompatibleBattery = incompatibleCatalog.components.find(({ group }) => group === "battery");
-  incompatibleBattery.model.voltage = 48;
+  const incompatibleBattery = catalog.components.find(
+    ({ id }) => id === "battery-48v-100ah"
+  );
   const components = [
     component("battery", incompatibleBattery),
     component("inverter", inverterDefinition)
@@ -369,7 +420,7 @@ test("an incompatible source voltage reports a mismatch", () => {
   ];
 
   const result = evaluateCircuit({
-    catalog: incompatibleCatalog,
+    catalog,
     components,
     wires,
     elapsedMinutes: 0
@@ -625,6 +676,52 @@ test("parallel batteries balance charge while powering a 100 W load", (context) 
     highAfter.state.energyWh < highBattery.state.energyWh,
     "the high-charge battery should supply balancing current and part of the load"
   );
+});
+
+test("four 12 V batteries in series power a 48 V inverter and 100 W light", (context) => {
+  const inverter48Definition = catalog.components.find(
+    ({ id }) => id === "inverter-48v-3000w"
+  );
+  const batteries = [
+    component("battery-1", batteryDefinition, 0, 0),
+    component("battery-2", batteryDefinition, 0, 120),
+    component("battery-3", batteryDefinition, 0, 240),
+    component("battery-4", batteryDefinition, 0, 360)
+  ];
+  const components = [
+    ...batteries,
+    component("inverter", inverter48Definition, 240, 180),
+    component("light", lightDefinition, 480, 180)
+  ];
+  const wires = [
+    wire("series-1", "battery-1", "positive", "battery-2", "negative"),
+    wire("series-2", "battery-2", "positive", "battery-3", "negative"),
+    wire("series-3", "battery-3", "positive", "battery-4", "negative"),
+    wire("dc-negative", "battery-1", "negative", "inverter", "dc-negative"),
+    wire("dc-positive", "battery-4", "positive", "inverter", "dc-positive"),
+    wire("ac-line", "inverter", "ac-line", "light", "ac-line"),
+    wire("ac-neutral", "inverter", "ac-neutral", "light", "ac-neutral")
+  ];
+
+  const next = simulateTick(snapshot(components, wires), 1);
+  const light = next.components.find(({ id }) => id === "light");
+  const inverter = next.components.find(({ id }) => id === "inverter");
+
+  context.diagnostic(
+    `light ${light.state.powerWatts.toFixed(2)} W, ` +
+    `inverter ${inverter.state.powerWatts.toFixed(2)} W, ` +
+    `battery currents ${batteries.map(({ id }) =>
+      next.components.find((candidate) => candidate.id === id).state.currentAmps.toFixed(4)
+    ).join(", ")} A`
+  );
+  assert.ok(Math.abs(light.state.powerWatts - 100) < 0.01);
+  assert.ok(inverter.state.powerWatts > 100);
+  assert.deepEqual(next.report.operatingInverterIds, ["inverter"]);
+  assert.deepEqual(next.report.operatingLoadIds, ["light"]);
+  for (const battery of next.components.filter(({ id }) => id.startsWith("battery-"))) {
+    assert.ok(battery.state.energyWh < 960);
+    assert.ok(battery.state.currentAmps > 0);
+  }
 });
 
 test("shorting a battery creates high temperatures in minutes", (context) => {
