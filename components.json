@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "simulation": {
     "ambientTemperatureC": 20,
-    "coolingCoefficientPerMinute": 0.01,
+    "coolingCoefficientPerMinute": 0.02746826,
     "metersPerGridSpace": 0.1
   },
   "components": [

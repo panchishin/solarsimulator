@@ -163,6 +163,27 @@ function addWireCurrent(wireCurrents, wires, currentAmps) {
   }
 }
 
+function wireConnects(wire, first, second) {
+  return (
+    endpointKey(wire.from) === endpointKey(first) &&
+    endpointKey(wire.to) === endpointKey(second)
+  ) || (
+    endpointKey(wire.from) === endpointKey(second) &&
+    endpointKey(wire.to) === endpointKey(first)
+  );
+}
+
+function directWire(wires, first, second) {
+  return wires.find((wire) => wireConnects(wire, first, second));
+}
+
+function totalWireResistance(wires, physicalWires) {
+  return wires.reduce(
+    (total, wire) => total + physicalWires.get(wire.id).resistanceOhms,
+    0
+  );
+}
+
 export function evaluateCircuit({ catalog, components, wires }) {
   const definitions = catalogMap(catalog);
   const netlist = buildNetlist(catalog, components, wires);
@@ -173,6 +194,9 @@ export function evaluateCircuit({ catalog, components, wires }) {
   const wireMetrics = new Map();
   const operatingInverters = new Set();
   const operatingLoads = new Set();
+  const physicalWires = new Map(
+    wires.map((wire) => [wire.id, wirePhysicalProperties(catalog, components, wire)])
+  );
   const batteries = [];
   const inverters = [];
   const loads = [];
@@ -203,17 +227,95 @@ export function evaluateCircuit({ catalog, components, wires }) {
     }
   }
 
+  const sourceLoopCurrents = new Map();
+  const batteriesInLoops = new Set();
+  for (let firstIndex = 0; firstIndex < batteries.length; firstIndex += 1) {
+    for (let secondIndex = firstIndex + 1; secondIndex < batteries.length; secondIndex += 1) {
+      const first = batteries[firstIndex];
+      const second = batteries[secondIndex];
+      if (
+        batteriesInLoops.has(first.component.id) ||
+        batteriesInLoops.has(second.component.id)
+      ) continue;
+      const firstPositive = terminalNet(netlist, first.component.id, first.definition, "dc-positive");
+      const firstNegative = terminalNet(netlist, first.component.id, first.definition, "dc-negative");
+      const secondPositive = terminalNet(netlist, second.component.id, second.definition, "dc-positive");
+      const secondNegative = terminalNet(netlist, second.component.id, second.definition, "dc-negative");
+      const isClosedCrossLoop =
+        firstPositive !== firstNegative &&
+        firstPositive === secondNegative &&
+        firstNegative === secondPositive;
+      const bothEnergized =
+        (first.component.state?.energyWh ?? 0) > 0 &&
+        (second.component.state?.energyWh ?? 0) > 0;
+      const firstPositiveTerminal = first.definition.terminals.find(
+        ({ role }) => role === "dc-positive"
+      );
+      const firstNegativeTerminal = first.definition.terminals.find(
+        ({ role }) => role === "dc-negative"
+      );
+      const secondPositiveTerminal = second.definition.terminals.find(
+        ({ role }) => role === "dc-positive"
+      );
+      const secondNegativeTerminal = second.definition.terminals.find(
+        ({ role }) => role === "dc-negative"
+      );
+      const positiveCrossWire = directWire(
+        wires,
+        { componentId: first.component.id, terminalId: firstPositiveTerminal.id },
+        { componentId: second.component.id, terminalId: secondNegativeTerminal.id }
+      );
+      const negativeCrossWire = directWire(
+        wires,
+        { componentId: first.component.id, terminalId: firstNegativeTerminal.id },
+        { componentId: second.component.id, terminalId: secondPositiveTerminal.id }
+      );
+      if (
+        !isClosedCrossLoop ||
+        !bothEnergized ||
+        !positiveCrossWire ||
+        !negativeCrossWire
+      ) continue;
+
+      const loopWires = [positiveCrossWire, negativeCrossWire];
+      const wireResistance = totalWireResistance(loopWires, physicalWires);
+      const totalResistance =
+        first.definition.model.internalResistanceOhms +
+        second.definition.model.internalResistanceOhms +
+        wireResistance;
+      const currentAmps =
+        (first.definition.model.voltage + second.definition.model.voltage) /
+        Math.max(totalResistance, EPSILON);
+
+      sourceLoopCurrents.set(
+        first.component.id,
+        (sourceLoopCurrents.get(first.component.id) ?? 0) + currentAmps
+      );
+      batteriesInLoops.add(first.component.id);
+      batteriesInLoops.add(second.component.id);
+      sourceLoopCurrents.set(
+        second.component.id,
+        (sourceLoopCurrents.get(second.component.id) ?? 0) + currentAmps
+      );
+      addWireCurrent(wireCurrents, loopWires, currentAmps);
+      addHazard(
+        hazards,
+        "battery-loop-short",
+        `${first.definition.name} and ${second.definition.name} form a closed source loop.`,
+        [first.component.id, second.component.id],
+        loopWires.map(({ id }) => id)
+      );
+    }
+  }
+
   for (const { component: battery, definition: batteryDefinition } of batteries) {
     const positiveNet = terminalNet(netlist, battery.id, batteryDefinition, "dc-positive");
     const negativeNet = terminalNet(netlist, battery.id, batteryDefinition, "dc-negative");
-    let currentAmps = 0;
+    let currentAmps = sourceLoopCurrents.get(battery.id) ?? 0;
 
     if (positiveNet === negativeNet && (battery.state?.energyWh ?? 0) > 0) {
       const shortWires = wiresOnNets(wires, [positiveNet], netlist);
-      const wireResistance = shortWires.reduce(
-        (total, wire) => total + wirePhysicalProperties(catalog, components, wire).resistanceOhms,
-        0
-      );
+      const wireResistance = totalWireResistance(shortWires, physicalWires);
       const shortCurrent = batteryDefinition.model.voltage /
         Math.max(batteryDefinition.model.internalResistanceOhms + wireResistance, EPSILON);
       currentAmps += shortCurrent;
@@ -312,7 +414,7 @@ export function evaluateCircuit({ catalog, components, wires }) {
   }
 
   for (const wire of wires) {
-    const physical = wirePhysicalProperties(catalog, components, wire);
+    const physical = physicalWires.get(wire.id);
     const currentAmps = wireCurrents.get(wire.id) ?? 0;
     const heatWatts = currentAmps ** 2 * physical.resistanceOhms;
     wireMetrics.set(wire.id, {
@@ -355,6 +457,59 @@ export function calculateTemperature({
   return ambientTemperatureC +
     (previousTemperatureC - ambientTemperatureC) * retention +
     (heatWatts / heatCapacity) * (1 - retention) / coolingPerSecond;
+}
+
+export function findCoolingCoefficient({
+  evaluatePeak,
+  targetTemperatureC,
+  lowerBound = 0,
+  upperBound = 1,
+  toleranceC = 0.1,
+  maxIterations = 80
+}) {
+  if (
+    !Number.isFinite(lowerBound) ||
+    !Number.isFinite(upperBound) ||
+    lowerBound >= upperBound ||
+    !Number.isFinite(targetTemperatureC) ||
+    !Number.isFinite(toleranceC) ||
+    toleranceC <= 0 ||
+    !Number.isInteger(maxIterations) ||
+    maxIterations <= 0
+  ) {
+    throw new RangeError("Cooling calibration requires ordered finite bounds, positive tolerance, and positive iterations.");
+  }
+
+  let lower = lowerBound;
+  let upper = upperBound;
+  const lowerPeak = evaluatePeak(lower);
+  const upperPeak = evaluatePeak(upper);
+  if (
+    !Number.isFinite(lowerPeak) ||
+    !Number.isFinite(upperPeak) ||
+    lowerPeak < targetTemperatureC ||
+    upperPeak > targetTemperatureC
+  ) {
+    throw new RangeError("Cooling calibration bounds must bracket the target for a decreasing objective.");
+  }
+
+  let coefficient = lower;
+  let peakTemperatureC = lowerPeak;
+
+  for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
+    coefficient = (lower + upper) / 2;
+    peakTemperatureC = evaluatePeak(coefficient);
+    if (Math.abs(peakTemperatureC - targetTemperatureC) <= toleranceC) {
+      return { coefficient, peakTemperatureC, iterations: iteration };
+    }
+    if (peakTemperatureC > targetTemperatureC) {
+      lower = coefficient;
+    } else {
+      upper = coefficient;
+    }
+  }
+
+  return { coefficient, peakTemperatureC, iterations: maxIterations };
 }
 
 export function simulateTick(snapshot, minutesPerTick = 1) {

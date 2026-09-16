@@ -7,6 +7,7 @@ import {
   createComponentState,
   createWireState,
   evaluateCircuit,
+  findCoolingCoefficient,
   simulateTick,
   wirePhysicalProperties
 } from "../js/simulation.js";
@@ -36,6 +37,36 @@ const wire = (id, fromComponent, fromTerminal, toComponent, toTerminal) => ({
 
 function snapshot(components, wires, ambientTemperatureC = 20) {
   return { catalog, components, wires, elapsedMinutes: 0, ambientTemperatureC };
+}
+
+function runLightScenario(testCatalog = catalog) {
+  let system = {
+    ...snapshot(
+      [
+        component("battery", batteryDefinition, 0, 120),
+        component("inverter", inverterDefinition, 240, 120),
+        component("light", lightDefinition, 480, 120)
+      ],
+      [
+        wire("dc-positive", "battery", "positive", "inverter", "dc-positive"),
+        wire("dc-negative", "battery", "negative", "inverter", "dc-negative"),
+        wire("ac-line", "inverter", "ac-line", "light", "ac-line"),
+        wire("ac-neutral", "inverter", "ac-neutral", "light", "ac-neutral")
+      ]
+    ),
+    catalog: testCatalog
+  };
+  const peakTemperatures = Object.fromEntries(
+    [...system.components.map(({ id }) => [id, 20]), ...system.wires.map(({ id }) => [id, 20])]
+  );
+
+  while (system.components.find(({ id }) => id === "battery").state.stateOfCharge > 0.2) {
+    system = simulateTick(system, 1);
+    for (const item of [...system.components, ...system.wires]) {
+      peakTemperatures[item.id] = Math.max(peakTemperatures[item.id], item.state.temperatureC);
+    }
+  }
+  return { system, peakTemperatures };
 }
 
 test("components begin at ambient temperature and a battery begins at 80 percent charge", () => {
@@ -203,6 +234,66 @@ test("a depleted battery no longer supplies short-circuit current", () => {
   assert.equal(result.hazards.length, 0);
 });
 
+test("two cross-connected batteries form a hot closed source loop", (context) => {
+  const components = [
+    component("battery-a", batteryDefinition, 0, 0),
+    component("battery-b", batteryDefinition, 240, 0),
+    component("inverter", inverterDefinition, 480, 0)
+  ];
+  const wires = [
+    wire("cross-a", "battery-a", "positive", "battery-b", "negative"),
+    wire("cross-b", "battery-b", "positive", "battery-a", "negative"),
+    wire("dangling", "battery-a", "positive", "inverter", "dc-positive")
+  ];
+  const initial = snapshot(components, wires);
+  const evaluated = evaluateCircuit(initial);
+  const firstCurrent = evaluated.currents.get("battery-a");
+  const secondCurrent = evaluated.currents.get("battery-b");
+  const totalWireResistance = wires.filter(({ id }) => id.startsWith("cross")).reduce(
+    (total, connection) =>
+      total + wirePhysicalProperties(catalog, components, connection).resistanceOhms,
+    0
+  );
+  const expectedCurrent = 24 / (0.04 + totalWireResistance);
+
+  assert.equal(evaluated.hazards[0].type, "battery-loop-short");
+  assert.ok(Math.abs(firstCurrent - expectedCurrent) < 1e-9);
+  assert.equal(firstCurrent, secondCurrent);
+  assert.ok(evaluated.wireMetrics.get("cross-a").heatWatts > 0);
+  assert.ok(evaluated.wireMetrics.get("cross-b").heatWatts > 0);
+  assert.equal(evaluated.wireMetrics.get("dangling").currentAmps, 0);
+
+  const next = simulateTick(initial, 1);
+  context.diagnostic(`Two-battery loop current: ${firstCurrent.toFixed(2)} A`);
+  for (const battery of next.components.filter(({ id }) => id.startsWith("battery"))) {
+    context.diagnostic(
+      `${battery.id}: ${battery.state.temperatureC.toFixed(2)} °C, ` +
+      `${battery.state.energyWh.toFixed(2)} Wh remaining`
+    );
+    assert.ok(battery.state.temperatureC > 20);
+    assert.ok(battery.state.energyWh < 960);
+  }
+  for (const connection of next.wires.filter(({ id }) => id.startsWith("cross"))) {
+    assert.ok(connection.state.temperatureC > 20);
+  }
+});
+
+test("one cross-wire between two batteries remains an open circuit", () => {
+  const components = [
+    component("battery-a", batteryDefinition, 0, 0),
+    component("battery-b", batteryDefinition, 240, 0)
+  ];
+  const wires = [
+    wire("open-cross", "battery-a", "positive", "battery-b", "negative")
+  ];
+
+  const result = evaluateCircuit(snapshot(components, wires));
+  assert.equal(result.currents.get("battery-a"), 0);
+  assert.equal(result.currents.get("battery-b"), 0);
+  assert.equal(result.wireMetrics.get("open-cross").currentAmps, 0);
+  assert.equal(result.hazards.length, 0);
+});
+
 test("reversed inverter polarity is allowed and reported as a hazard", () => {
   const components = [
     component("battery", batteryDefinition),
@@ -261,30 +352,44 @@ test("the configured tick duration advances simulated time", () => {
   assert.equal(next.components[0].state.energyWh, 960);
 });
 
-test("a 100 W light runs from 80 to 20 percent with only marginal battery warming", (context) => {
-  let system = snapshot(
-    [
-      component("battery", batteryDefinition, 0, 120),
-      component("inverter", inverterDefinition, 240, 120),
-      component("light", lightDefinition, 480, 120)
-    ],
-    [
-      wire("dc-positive", "battery", "positive", "inverter", "dc-positive"),
-      wire("dc-negative", "battery", "negative", "inverter", "dc-negative"),
-      wire("ac-line", "inverter", "ac-line", "light", "ac-line"),
-      wire("ac-neutral", "inverter", "ac-neutral", "light", "ac-neutral")
-    ]
-  );
-  const peakTemperatures = Object.fromEntries(
-    [...system.components.map(({ id }) => [id, 20]), ...system.wires.map(({ id }) => [id, 20])]
-  );
+test("numerically calibrates bulb cooling to a 2750 C peak", (context) => {
+  const calibration = findCoolingCoefficient({
+    evaluatePeak: (coefficient) => {
+      const candidateCatalog = structuredClone(catalog);
+      candidateCatalog.simulation.coolingCoefficientPerMinute = coefficient;
+      return runLightScenario(candidateCatalog).peakTemperatures.light;
+    },
+    targetTemperatureC: 2750,
+    lowerBound: 0.01,
+    upperBound: 0.05,
+    toleranceC: 0.05
+  });
 
-  while (system.components.find(({ id }) => id === "battery").state.stateOfCharge > 0.2) {
-    system = simulateTick(system, 1);
-    for (const item of [...system.components, ...system.wires]) {
-      peakTemperatures[item.id] = Math.max(peakTemperatures[item.id], item.state.temperatureC);
-    }
-  }
+  context.diagnostic(
+    `Calibrated coefficient: ${calibration.coefficient.toFixed(8)}/min; ` +
+    `bulb peak: ${calibration.peakTemperatureC.toFixed(2)} °C; ` +
+    `${calibration.iterations} bisection iterations`
+  );
+  assert.ok(calibration.peakTemperatureC >= 2500);
+  assert.ok(calibration.peakTemperatureC <= 3000);
+  assert.ok(Math.abs(calibration.peakTemperatureC - 2750) <= 0.05);
+  assert.ok(calibration.coefficient > 0.025 && calibration.coefficient < 0.031);
+});
+
+test("cooling calibration rejects bounds that do not bracket the target", () => {
+  assert.throws(
+    () => findCoolingCoefficient({
+      evaluatePeak: (coefficient) => 100 - coefficient,
+      targetTemperatureC: 200,
+      lowerBound: 0,
+      upperBound: 1
+    }),
+    RangeError
+  );
+});
+
+test("a 100 W light runs from 80 to 20 percent with only marginal battery warming", (context) => {
+  const { system, peakTemperatures } = runLightScenario();
 
   const battery = system.components.find(({ id }) => id === "battery");
   context.diagnostic(`100 W light runtime: ${system.elapsedMinutes} minutes`);
@@ -295,9 +400,111 @@ test("a 100 W light runs from 80 to 20 percent with only marginal battery warmin
   assert.ok(peakTemperatures.battery < 21);
   assert.ok(peakTemperatures.battery > 20);
   assert.ok(peakTemperatures.inverter > peakTemperatures.battery);
-  assert.ok(peakTemperatures.light > peakTemperatures.inverter);
+  assert.ok(peakTemperatures.light >= 2500 && peakTemperatures.light <= 3000);
+  assert.ok(Math.abs(peakTemperatures.light - 2750) <= 1);
   assert.equal(system.report.operatingLoadIds[0], "light");
   assert.ok(battery.state.stateOfCharge <= 0.2);
+});
+
+test("a light wired with reversed AC terminals still operates and heats", () => {
+  const components = [
+    component("battery", batteryDefinition, 0, 120),
+    component("inverter", inverterDefinition, 240, 120),
+    component("light", lightDefinition, 480, 120)
+  ];
+  const wires = [
+    wire("dc-positive", "battery", "positive", "inverter", "dc-positive"),
+    wire("dc-negative", "battery", "negative", "inverter", "dc-negative"),
+    wire("ac-line", "inverter", "ac-line", "light", "ac-neutral"),
+    wire("ac-neutral", "inverter", "ac-neutral", "light", "ac-line")
+  ];
+
+  const next = simulateTick(snapshot(components, wires), 1);
+  const light = next.components.find(({ id }) => id === "light");
+
+  assert.equal(light.state.powerWatts, 100);
+  assert.equal(light.state.heatWatts, 100);
+  assert.ok(light.state.temperatureC > 20);
+  assert.deepEqual(next.report.operatingLoadIds, ["light"]);
+});
+
+test("two 100 W incandescent lights in series each operate at reduced power and heat", () => {
+  const components = [
+    component("battery", batteryDefinition, 0, 120),
+    component("inverter", inverterDefinition, 240, 120),
+    component("light-a", lightDefinition, 480, 48),
+    component("light-b", lightDefinition, 480, 192)
+  ];
+  const wires = [
+    wire("dc-positive", "battery", "positive", "inverter", "dc-positive"),
+    wire("dc-negative", "battery", "negative", "inverter", "dc-negative"),
+    wire("series-start", "inverter", "ac-line", "light-a", "ac-line"),
+    wire("series-middle", "light-a", "ac-neutral", "light-b", "ac-line"),
+    wire("series-end", "light-b", "ac-neutral", "inverter", "ac-neutral")
+  ];
+
+  const next = simulateTick(snapshot(components, wires), 1);
+  const firstLight = next.components.find(({ id }) => id === "light-a");
+  const secondLight = next.components.find(({ id }) => id === "light-b");
+
+  // Each rated bulb is 144 Ω. Two in series draw 120 V / 288 Ω,
+  // so each dissipates I²R = 25 W.
+  assert.ok(Math.abs(firstLight.state.powerWatts - 25) < 1e-9);
+  assert.ok(Math.abs(secondLight.state.powerWatts - 25) < 1e-9);
+  assert.ok(firstLight.state.temperatureC > 20);
+  assert.ok(secondLight.state.temperatureC > 20);
+  assert.deepEqual(
+    [...next.report.operatingLoadIds].sort(),
+    ["light-a", "light-b"]
+  );
+});
+
+test("parallel batteries balance charge while powering a 100 W load", (context) => {
+  const lowBattery = component("battery-low", batteryDefinition, 0, 48);
+  lowBattery.state.energyWh = batteryDefinition.model.capacityWh * 0.2;
+  lowBattery.state.stateOfCharge = 0.2;
+  const highBattery = component("battery-high", batteryDefinition, 0, 192);
+  highBattery.state.energyWh = batteryDefinition.model.capacityWh * 0.8;
+  highBattery.state.stateOfCharge = 0.8;
+
+  let system = snapshot(
+    [
+      lowBattery,
+      highBattery,
+      component("inverter", inverterDefinition, 240, 120),
+      component("light", lightDefinition, 480, 120)
+    ],
+    [
+      wire("low-positive", "battery-low", "positive", "inverter", "dc-positive"),
+      wire("low-negative", "battery-low", "negative", "inverter", "dc-negative"),
+      wire("high-positive", "battery-high", "positive", "inverter", "dc-positive"),
+      wire("high-negative", "battery-high", "negative", "inverter", "dc-negative"),
+      wire("ac-line", "inverter", "ac-line", "light", "ac-line"),
+      wire("ac-neutral", "inverter", "ac-neutral", "light", "ac-neutral")
+    ]
+  );
+
+  for (let minute = 0; minute < 5; minute += 1) {
+    system = simulateTick(system, 1);
+  }
+
+  const lowAfter = system.components.find(({ id }) => id === "battery-low");
+  const highAfter = system.components.find(({ id }) => id === "battery-high");
+
+  context.diagnostic(
+    `After 5 minutes: low battery ${lowAfter.state.energyWh.toFixed(2)} Wh ` +
+    `(${(lowAfter.state.stateOfCharge * 100).toFixed(2)}%), ` +
+    `high battery ${highAfter.state.energyWh.toFixed(2)} Wh ` +
+    `(${(highAfter.state.stateOfCharge * 100).toFixed(2)}%)`
+  );
+  assert.ok(
+    lowAfter.state.energyWh > lowBattery.state.energyWh,
+    "the low-charge battery should receive balancing energy from the high-charge battery"
+  );
+  assert.ok(
+    highAfter.state.energyWh < highBattery.state.energyWh,
+    "the high-charge battery should supply balancing current and part of the load"
+  );
 });
 
 test("shorting a battery creates high temperatures in minutes", (context) => {
