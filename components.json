@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 2,
+  "simulation": {
+    "ambientTemperatureC": 20,
+    "coolingCoefficientPerMinute": 0.01,
+    "metersPerGridSpace": 0.1
+  },
+  "components": [
+    {
+      "id": "battery-12v-100ah",
+      "group": "battery",
+      "name": "12V 100Ah Battery",
+      "description": "A compact battery for a 12 volt home power system.",
+      "gridSize": { "width": 4, "height": 3 },
+      "specifications": {
+        "Voltage": "12 V DC",
+        "Capacity": "100 Ah / 1,200 Wh",
+        "Starting charge": "80%",
+        "Weight": "25 kg",
+        "Internal resistance": "0.02 Ω"
+      },
+      "terminals": [
+        { "id": "positive", "label": "+", "role": "dc-positive", "domain": "dc", "edge": "right", "offset": 0.3 },
+        { "id": "negative", "label": "−", "role": "dc-negative", "domain": "dc", "edge": "right", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "battery",
+        "voltage": 12,
+        "capacityAh": 100,
+        "capacityWh": 1200,
+        "startingStateOfCharge": 0.8,
+        "internalResistanceOhms": 0.02,
+        "massKg": 25,
+        "specificHeatJPerKgC": 900
+      }
+    },
+    {
+      "id": "inverter-12v-3000w",
+      "group": "inverter",
+      "name": "3000W Inverter",
+      "description": "Converts 12 volt battery power to 120 volt AC power.",
+      "gridSize": { "width": 5, "height": 4 },
+      "specifications": {
+        "DC input": "12 V DC",
+        "AC output": "120 V / 60 Hz",
+        "Continuous output": "3,000 W",
+        "Idle draw": "25 W",
+        "Efficiency": "90%",
+        "Weight": "12 kg"
+      },
+      "terminals": [
+        { "id": "dc-positive", "label": "DC +", "role": "dc-positive", "domain": "dc", "edge": "left", "offset": 0.3 },
+        { "id": "dc-negative", "label": "DC −", "role": "dc-negative", "domain": "dc", "edge": "left", "offset": 0.7 },
+        { "id": "ac-line", "label": "AC L", "role": "ac-line", "domain": "ac", "edge": "right", "offset": 0.3 },
+        { "id": "ac-neutral", "label": "AC N", "role": "ac-neutral", "domain": "ac", "edge": "right", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "inverter",
+        "inputVoltage": 12,
+        "outputVoltage": 120,
+        "outputFrequencyHz": 60,
+        "maxOutputWatts": 3000,
+        "idleDrawWatts": 25,
+        "efficiency": 0.9,
+        "massKg": 12,
+        "specificHeatJPerKgC": 900
+      }
+    },
+    {
+      "id": "load-light-100w",
+      "group": "load",
+      "name": "100W Light Bulb",
+      "description": "A 120 volt incandescent lamp used as a simple AC load.",
+      "gridSize": { "width": 3, "height": 3 },
+      "specifications": {
+        "Supply": "120 V AC",
+        "Power": "100 W",
+        "Weight": "0.1 kg",
+        "Specific heat": "800 J/(kg·°C)"
+      },
+      "terminals": [
+        { "id": "ac-line", "label": "AC L", "role": "ac-line", "domain": "ac", "edge": "left", "offset": 0.3 },
+        { "id": "ac-neutral", "label": "AC N", "role": "ac-neutral", "domain": "ac", "edge": "left", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "load",
+        "voltage": 120,
+        "powerWatts": 100,
+        "massKg": 0.1,
+        "specificHeatJPerKgC": 800
+      }
+    }
+  ],
+  "wire": {
+    "id": "ideal-wire",
+    "name": "1 AWG Copper Wire",
+    "specifications": {
+      "Gauge": "1 AWG",
+      "Conductor area": "42.4 mm²",
+      "Material": "Copper",
+      "Resistivity": "1.724 × 10⁻⁸ Ω·m",
+      "Density": "8,960 kg/m³",
+      "Specific heat": "385 J/(kg·°C)",
+      "Length scale": "0.1 m per grid space"
+    },
+    "model": {
+      "gauge": "1 AWG",
+      "conductorAreaMm2": 42.4,
+      "resistivityOhmMeters": 1.724e-8,
+      "densityKgPerM3": 8960,
+      "specificHeatJPerKgC": 385
+    }
+  }
+}

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Build and simulate a small home solar power circuit.">
+    <title>Solar Power Simulator</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Circuit workshop</p>
+        <h1>Solar Power Simulator</h1>
+      </div>
+      <div class="header-controls">
+        <label>Theme
+          <select id="theme-select">
+            <option value="default">Default</option>
+            <option value="retro">Retro</option>
+          </select>
+        </label>
+        <span id="save-status" class="save-status">Saved locally</span>
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <aside class="palette-panel" aria-label="Component palette">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Parts bin</p>
+            <h2>Components</h2>
+          </div>
+          <span id="palette-count" class="count-badge">0</span>
+        </div>
+        <div id="palette-filters" class="filter-row" role="group" aria-label="Filter component groups">
+          <button class="filter-button active" type="button" data-filter="all">All</button>
+          <button class="filter-button" type="button" data-filter="battery">Battery</button>
+          <button class="filter-button" type="button" data-filter="inverter">Inverter</button>
+          <button class="filter-button" type="button" data-filter="load">Load</button>
+        </div>
+        <div id="palette" class="palette-list"></div>
+        <div class="wire-help">
+          <span class="wire-swatch" aria-hidden="true"></span>
+          <div>
+            <strong>Wire tool</strong>
+            <p>Drag from one terminal to another. Invalid connections remain visible with a hazard warning.</p>
+          </div>
+        </div>
+      </aside>
+
+      <section class="workspace-panel" aria-label="Circuit design workspace">
+        <div class="workspace-toolbar">
+          <div class="toolbar-group">
+            <button id="undo-button" type="button" title="Undo (Ctrl/Cmd+Z)">Undo</button>
+            <button id="redo-button" type="button" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
+            <button id="delete-button" type="button" title="Delete selected item">Delete</button>
+          </div>
+          <div class="toolbar-group">
+            <span id="selection-label" class="selection-label">Nothing selected</span>
+            <button id="clear-button" class="danger-button" type="button">Clear grid</button>
+          </div>
+        </div>
+        <div id="circuit-board" class="circuit-board" role="region" tabindex="0" aria-label="Circuit design grid">
+          <svg id="wire-layer" class="wire-layer" aria-hidden="true">
+            <g id="wire-lines"></g>
+            <line id="wire-preview" class="wire preview" x1="0" y1="0" x2="0" y2="0"></line>
+          </svg>
+          <div id="component-layer" class="component-layer"></div>
+          <div id="empty-hint" class="empty-hint">
+            <strong>Start your circuit</strong>
+            <span>Drag a component here</span>
+          </div>
+        </div>
+      </section>
+
+      <aside class="simulation-panel" aria-label="Simulation status">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Live model</p>
+            <h2>Simulation</h2>
+          </div>
+          <span id="run-indicator" class="run-indicator paused">Paused</span>
+        </div>
+        <div class="simulation-controls">
+          <button id="run-button" class="primary-button" type="button">Run</button>
+          <button id="step-button" type="button">Step once</button>
+          <label>
+            Minutes per tick
+            <input id="minutes-input" type="number" min="0.01" step="0.01" value="1">
+          </label>
+          <label>
+            Ticks per second
+            <input id="rate-input" type="number" min="0.1" max="20" step="0.1" value="1">
+          </label>
+        </div>
+        <dl class="metrics">
+          <div><dt>Elapsed time</dt><dd id="elapsed-value">0 min</dd></div>
+          <div><dt>Total stored</dt><dd id="energy-value">0 Wh</dd></div>
+          <div><dt>Battery current</dt><dd id="current-value">0 A</dd></div>
+          <div><dt>Inverter</dt><dd id="inverter-value">Not connected</dd></div>
+        </dl>
+        <section class="environment-section">
+          <h3>Environment</h3>
+          <label class="ambient-control">
+            Ambient temperature (°C)
+            <input id="ambient-input" type="number" step="0.1" value="20">
+          </label>
+          <p class="cooling-note">Cooling coefficient: <strong id="cooling-value">0.01/min</strong></p>
+        </section>
+        <section class="component-status-section">
+          <h3>Components &amp; wires</h3>
+          <div id="item-status" class="status-list">
+            <p class="muted">Place a component to begin.</p>
+          </div>
+        </section>
+        <section class="hazard-section">
+          <h3>Hazards</h3>
+          <div id="hazard-list" class="status-list">
+            <p class="safe-message">No active hazards</p>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>
