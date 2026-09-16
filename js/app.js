@@ -1,5 +1,9 @@
 import { CircuitEditor } from "./circuit.js";
-import { evaluateCircuit, simulateTick } from "./simulation.js";
+import {
+  evaluateCircuit,
+  resetSimulation,
+  simulateTick
+} from "./simulation.js";
 
 const STORAGE_KEY = "solar-power-simulator";
 const STORAGE_VERSION = 2;
@@ -214,6 +218,16 @@ function runTick() {
   saveState();
 }
 
+function resetSimulationState() {
+  setRunning(false);
+  const reset = resetSimulation(snapshot());
+  currentLayout().circuit.components = reset.components;
+  currentLayout().circuit.wires = reset.wires;
+  currentLayout().elapsedMinutes = 0;
+  refreshEvaluation();
+  saveState();
+}
+
 function setRunning(running) {
   const hasItems = currentLayout().circuit.components.length > 0;
   appState.settings.running = Boolean(running && hasItems);
@@ -319,6 +333,7 @@ function bindControls() {
   byId("theme-select").addEventListener("change", (event) => setTheme(event.target.value));
   byId("run-button").addEventListener("click", () => setRunning(!appState.settings.running));
   byId("step-button").addEventListener("click", runTick);
+  byId("reset-simulation-button").addEventListener("click", resetSimulationState);
   byId("minutes-input").addEventListener("change", (event) => {
     appState.settings.minutesPerTick = Math.max(0.01, Number(event.target.value) || 1);
     event.target.value = appState.settings.minutesPerTick;
@@ -341,7 +356,7 @@ function bindControls() {
   byId("redo-button").addEventListener("click", () => restoreHistory(historyIndex + 1));
   byId("delete-button").addEventListener("click", () => editor.deleteSelection());
   byId("clear-button").addEventListener("click", () => {
-    if (currentLayout().circuit.components.length && window.confirm("Clear every component and wire from this layout?")) {
+    if (currentLayout().circuit.components.length) {
       editor.clear();
     }
   });

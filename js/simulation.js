@@ -184,7 +184,7 @@ function totalWireResistance(wires, physicalWires) {
   );
 }
 
-export function evaluateCircuit({ catalog, components, wires }) {
+function evaluateLegacyCircuit({ catalog, components, wires }) {
   const definitions = catalogMap(catalog);
   const netlist = buildNetlist(catalog, components, wires);
   const hazards = [];
@@ -437,6 +437,347 @@ export function evaluateCircuit({ catalog, components, wires }) {
   };
 }
 
+function interpolateBatteryVoltage(definition, stateOfCharge) {
+  const curve = definition.model.openCircuitVoltageCurve;
+  if (!Array.isArray(curve) || curve.length === 0) return definition.model.voltage;
+  const charge = Math.max(0, Math.min(1, stateOfCharge ?? 0));
+  if (charge <= curve[0].stateOfCharge) return curve[0].voltage;
+  for (let index = 1; index < curve.length; index += 1) {
+    const upper = curve[index];
+    const lower = curve[index - 1];
+    if (charge <= upper.stateOfCharge) {
+      const fraction = (charge - lower.stateOfCharge) /
+        (upper.stateOfCharge - lower.stateOfCharge);
+      return lower.voltage + fraction * (upper.voltage - lower.voltage);
+    }
+  }
+  return curve.at(-1).voltage;
+}
+
+function solveLinearSystem(matrix, vector) {
+  const size = vector.length;
+  const rows = matrix.map((row, index) => [...row, vector[index]]);
+  for (let column = 0; column < size; column += 1) {
+    let pivot = column;
+    for (let row = column + 1; row < size; row += 1) {
+      if (Math.abs(rows[row][column]) > Math.abs(rows[pivot][column])) pivot = row;
+    }
+    if (Math.abs(rows[pivot][column]) < EPSILON) continue;
+    [rows[column], rows[pivot]] = [rows[pivot], rows[column]];
+    const divisor = rows[column][column];
+    for (let entry = column; entry <= size; entry += 1) rows[column][entry] /= divisor;
+    for (let row = 0; row < size; row += 1) {
+      if (row === column) continue;
+      const factor = rows[row][column];
+      for (let entry = column; entry <= size; entry += 1) {
+        rows[row][entry] -= factor * rows[column][entry];
+      }
+    }
+  }
+  return rows.map((row, index) =>
+    Math.abs(row[index]) < EPSILON ? 0 : row[size]
+  );
+}
+
+function solveResistiveNetwork({ branches, injections = new Map(), fixed = new Map() }) {
+  const allNodes = new Set();
+  for (const branch of branches) {
+    allNodes.add(branch.from);
+    allNodes.add(branch.to);
+  }
+  for (const node of injections.keys()) allNodes.add(node);
+  const unknownNodes = [...allNodes].filter((node) => !fixed.has(node));
+  const indexes = new Map(unknownNodes.map((node, index) => [node, index]));
+  const matrix = unknownNodes.map(() => unknownNodes.map(() => 0));
+  const vector = unknownNodes.map((node) => injections.get(node) ?? 0);
+
+  for (const branch of branches) {
+    const conductance = 1 / Math.max(branch.resistanceOhms, EPSILON);
+    for (const [node, other] of [[branch.from, branch.to], [branch.to, branch.from]]) {
+      const row = indexes.get(node);
+      if (row === undefined) continue;
+      matrix[row][row] += conductance;
+      const otherColumn = indexes.get(other);
+      if (otherColumn === undefined) {
+        vector[row] += conductance * (fixed.get(other) ?? 0);
+      } else {
+        matrix[row][otherColumn] -= conductance;
+      }
+    }
+  }
+
+  const solved = solveLinearSystem(matrix, vector);
+  return new Map([
+    ...fixed,
+    ...unknownNodes.map((node, index) => [node, solved[index]])
+  ]);
+}
+
+function addInjection(injections, node, amps) {
+  injections.set(node, (injections.get(node) ?? 0) + amps);
+}
+
+function branchCurrent(branch, voltages) {
+  return ((voltages.get(branch.from) ?? 0) - (voltages.get(branch.to) ?? 0)) /
+    Math.max(branch.resistanceOhms, EPSILON);
+}
+
+function wireBranch(catalog, components, wire) {
+  const physical = wirePhysicalProperties(catalog, components, wire);
+  return {
+    id: wire.id,
+    type: "wire",
+    from: endpointKey(wire.from),
+    to: endpointKey(wire.to),
+    resistanceOhms: physical.resistanceOhms,
+    physical
+  };
+}
+
+export function evaluateCircuit(snapshot) {
+  const { catalog, components, wires } = snapshot;
+  const legacy = evaluateLegacyCircuit(snapshot);
+  const definitions = catalogMap(catalog);
+  const componentMetrics = new Map(
+    components.map(({ id }) => [id, { currentAmps: 0, powerWatts: 0, heatWatts: 0 }])
+  );
+  const wireMetrics = new Map();
+  const wireCurrents = new Map(wires.map(({ id }) => [id, 0]));
+  const instances = new Map(components.map((component) => [component.id, component]));
+  const wireBranches = new Map();
+  const operatingInverters = new Set();
+  const operatingLoads = new Set();
+  const branchesByDomain = { ac: [], dc: [] };
+
+  for (const wire of wires) {
+    const branch = wireBranch(catalog, components, wire);
+    wireBranches.set(wire.id, branch);
+    const fromDefinition = definitions.get(
+      instances.get(wire.from.componentId)?.componentId
+    );
+    const terminal = fromDefinition?.terminals.find(({ id }) => id === wire.from.terminalId);
+    if (terminal?.domain) branchesByDomain[terminal.domain].push(branch);
+  }
+
+  const loads = components.filter(
+    ({ componentId }) => definitions.get(componentId)?.model.type === "load"
+  );
+  for (const load of loads) {
+    const definition = definitions.get(load.componentId);
+    branchesByDomain.ac.push({
+      id: load.id,
+      type: "load",
+      from: terminalKey(load.id, definition.terminals.find(({ role }) => role === "ac-line").id),
+      to: terminalKey(load.id, definition.terminals.find(({ role }) => role === "ac-neutral").id),
+      resistanceOhms: definition.model.voltage ** 2 / definition.model.powerWatts
+    });
+  }
+
+  const inverters = components.filter(
+    ({ componentId }) => definitions.get(componentId)?.model.type === "inverter"
+  );
+  const activeInverterIds = legacy.operatingInverters;
+  const acFixed = new Map();
+  for (const inverter of inverters) {
+    if (!activeInverterIds.has(inverter.id)) continue;
+    const definition = definitions.get(inverter.componentId);
+    acFixed.set(
+      terminalKey(inverter.id, definition.terminals.find(({ role }) => role === "ac-neutral").id),
+      0
+    );
+    acFixed.set(
+      terminalKey(inverter.id, definition.terminals.find(({ role }) => role === "ac-line").id),
+      definition.model.outputVoltage
+    );
+  }
+  const acVoltages = solveResistiveNetwork({
+    branches: branchesByDomain.ac,
+    fixed: acFixed
+  });
+
+  for (const branch of branchesByDomain.ac) {
+    const currentAmps = Math.abs(branchCurrent(branch, acVoltages));
+    if (branch.type === "load") {
+      const powerWatts = currentAmps ** 2 * branch.resistanceOhms;
+      componentMetrics.set(branch.id, { currentAmps, powerWatts, heatWatts: powerWatts });
+      if (powerWatts > EPSILON) operatingLoads.add(branch.id);
+    } else {
+      wireCurrents.set(branch.id, currentAmps);
+    }
+  }
+
+  const inverterDemands = new Map();
+  for (const inverter of inverters) {
+    const definition = definitions.get(inverter.componentId);
+    if (!activeInverterIds.has(inverter.id)) {
+      inverterDemands.set(inverter.id, 0);
+      continue;
+    }
+    const line = terminalKey(
+      inverter.id,
+      definition.terminals.find(({ role }) => role === "ac-line").id
+    );
+    const outputCurrent = branchesByDomain.ac
+      .filter((branch) => branch.from === line || branch.to === line)
+      .reduce((total, branch) => {
+        const signed = branchCurrent(branch, acVoltages);
+        return total + (branch.from === line ? signed : -signed);
+      }, 0);
+    const outputWatts = Math.max(0, definition.model.outputVoltage * outputCurrent);
+    const inputWatts = definition.model.idleDrawWatts +
+      outputWatts / definition.model.efficiency;
+    inverterDemands.set(inverter.id, inputWatts);
+    componentMetrics.set(inverter.id, {
+      currentAmps: inputWatts / definition.model.inputVoltage,
+      powerWatts: inputWatts,
+      heatWatts: definition.model.idleDrawWatts +
+        outputWatts * (1 / definition.model.efficiency - 1)
+    });
+    operatingInverters.add(inverter.id);
+  }
+
+  const dcInjections = new Map();
+  const dcFixed = new Map();
+  const batteries = components.filter(
+    ({ componentId }) => definitions.get(componentId)?.model.type === "battery"
+  );
+  const currents = new Map(batteries.map(({ id }) => [id, 0]));
+  for (const battery of batteries) {
+    const definition = definitions.get(battery.componentId);
+    if ((battery.state?.energyWh ?? 0) <= 0) continue;
+    const positive = terminalKey(
+      battery.id,
+      definition.terminals.find(({ role }) => role === "dc-positive").id
+    );
+    const negative = terminalKey(
+      battery.id,
+      definition.terminals.find(({ role }) => role === "dc-negative").id
+    );
+    const resistanceOhms = definition.model.internalResistanceOhms;
+    const openCircuitVoltage = interpolateBatteryVoltage(
+      definition,
+      battery.state?.stateOfCharge
+    );
+    branchesByDomain.dc.push({
+      id: battery.id,
+      type: "battery",
+      from: positive,
+      to: negative,
+      resistanceOhms,
+      openCircuitVoltage
+    });
+    const nortonCurrent = openCircuitVoltage / resistanceOhms;
+    addInjection(dcInjections, positive, nortonCurrent);
+    addInjection(dcInjections, negative, -nortonCurrent);
+    if (dcFixed.size === 0) dcFixed.set(negative, 0);
+  }
+
+  const activeInverters = inverters
+    .filter(({ id }) => activeInverterIds.has(id))
+    .map((inverter) => {
+      const definition = definitions.get(inverter.componentId);
+      return {
+        inverter,
+        definition,
+        positive: terminalKey(
+          inverter.id,
+          definition.terminals.find(({ role }) => role === "dc-positive").id
+        ),
+        negative: terminalKey(
+          inverter.id,
+          definition.terminals.find(({ role }) => role === "dc-negative").id
+        )
+      };
+    });
+  const inverterCurrents = new Map(
+    activeInverters.map(({ inverter, definition }) => [
+      inverter.id,
+      (inverterDemands.get(inverter.id) ?? 0) / definition.model.inputVoltage
+    ])
+  );
+
+  const solveDc = () => {
+    const injections = new Map(dcInjections);
+    for (const { inverter, positive, negative } of activeInverters) {
+      const demandAmps = inverterCurrents.get(inverter.id) ?? 0;
+      addInjection(injections, positive, -demandAmps);
+      addInjection(injections, negative, demandAmps);
+    }
+    return solveResistiveNetwork({
+      branches: branchesByDomain.dc,
+      injections,
+      fixed: dcFixed
+    });
+  };
+
+  let dcVoltages = solveDc();
+  for (let iteration = 0; iteration < 20; iteration += 1) {
+    let largestChange = 0;
+    for (const { inverter, positive, negative } of activeInverters) {
+      const terminalVoltage = Math.abs(
+        (dcVoltages.get(positive) ?? 0) - (dcVoltages.get(negative) ?? 0)
+      );
+      const nextCurrent = (inverterDemands.get(inverter.id) ?? 0) /
+        Math.max(terminalVoltage, 1);
+      largestChange = Math.max(
+        largestChange,
+        Math.abs(nextCurrent - (inverterCurrents.get(inverter.id) ?? 0))
+      );
+      inverterCurrents.set(inverter.id, nextCurrent);
+    }
+    dcVoltages = solveDc();
+    if (largestChange < 1e-9) break;
+  }
+
+  for (const { inverter } of activeInverters) {
+    const metrics = componentMetrics.get(inverter.id);
+    componentMetrics.set(inverter.id, {
+      ...metrics,
+      currentAmps: inverterCurrents.get(inverter.id) ?? 0
+    });
+  }
+
+  for (const branch of branchesByDomain.dc) {
+    if (branch.type === "battery") {
+      const terminalVoltage =
+        (dcVoltages.get(branch.from) ?? 0) - (dcVoltages.get(branch.to) ?? 0);
+      const currentAmps =
+        (branch.openCircuitVoltage - terminalVoltage) / branch.resistanceOhms;
+      currents.set(branch.id, currentAmps);
+      componentMetrics.set(branch.id, {
+        currentAmps,
+        powerWatts: branch.openCircuitVoltage * currentAmps,
+        heatWatts: currentAmps ** 2 * branch.resistanceOhms
+      });
+    } else {
+      wireCurrents.set(branch.id, Math.abs(branchCurrent(branch, dcVoltages)));
+    }
+  }
+
+  for (const wire of wires) {
+    const physical = wireBranches.get(wire.id).physical;
+    const currentAmps = wireCurrents.get(wire.id) ?? 0;
+    const heatWatts = currentAmps ** 2 * physical.resistanceOhms;
+    wireMetrics.set(wire.id, {
+      ...physical,
+      currentAmps,
+      powerWatts: heatWatts,
+      heatWatts
+    });
+  }
+
+  return {
+    netlist: legacy.netlist,
+    hazards: legacy.hazards,
+    currents,
+    wireCurrents,
+    componentMetrics,
+    wireMetrics,
+    operatingInverters,
+    operatingLoads
+  };
+}
+
 export function calculateTemperature({
   previousTemperatureC,
   ambientTemperatureC,
@@ -593,5 +934,37 @@ export function simulateTick(snapshot, minutesPerTick = 1) {
       componentMetrics: Object.fromEntries(result.componentMetrics),
       wireMetrics: Object.fromEntries(result.wireMetrics)
     }
+  };
+}
+
+export function resetSimulation(snapshot) {
+  const ambientTemperatureC = ambientFrom(
+    snapshot.catalog,
+    snapshot.ambientTemperatureC
+  );
+  const definitions = catalogMap(snapshot.catalog);
+  const components = snapshot.components.map((component) => ({
+    ...component,
+    state: createComponentState(
+      definitions.get(component.componentId),
+      ambientTemperatureC
+    )
+  }));
+  const wires = snapshot.wires.map((wire) => ({
+    ...wire,
+    state: createWireState(
+      snapshot.catalog,
+      components,
+      wire,
+      ambientTemperatureC
+    )
+  }));
+
+  return {
+    ...snapshot,
+    components,
+    wires,
+    ambientTemperatureC,
+    elapsedMinutes: 0
   };
 }

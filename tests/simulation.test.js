@@ -8,6 +8,7 @@ import {
   createWireState,
   evaluateCircuit,
   findCoolingCoefficient,
+  resetSimulation,
   simulateTick,
   wirePhysicalProperties
 } from "../js/simulation.js";
@@ -18,6 +19,8 @@ const catalog = JSON.parse(
 const batteryDefinition = catalog.components.find(({ group }) => group === "battery");
 const inverterDefinition = catalog.components.find(({ group }) => group === "inverter");
 const lightDefinition = catalog.components.find(({ group }) => group === "load");
+const hairDryerDefinition = catalog.components.find(({ id }) => id === "load-hair-dryer-1200w");
+const fridgeDefinition = catalog.components.find(({ id }) => id === "load-fridge-400w");
 
 function component(id, definition, x = 0, y = 0, ambientTemperatureC = 20) {
   return {
@@ -75,6 +78,35 @@ test("components begin at ambient temperature and a battery begins at 80 percent
   assert.equal(state.stateOfCharge, 0.8);
   assert.equal(state.temperatureC, 20);
   assert.equal(createComponentState(inverterDefinition, 15).temperatureC, 15);
+});
+
+test("catalog includes the requested battery and inverter variants", () => {
+  const batteries = catalog.components
+    .filter(({ group }) => group === "battery")
+    .map(({ model }) => `${model.voltage}V-${model.capacityAh}Ah`)
+    .sort();
+  const inverters = catalog.components
+    .filter(({ group }) => group === "inverter")
+    .map(({ model }) => `${model.inputVoltage}V-${model.maxOutputWatts}W`)
+    .sort();
+
+  assert.deepEqual(batteries, [
+    "12V-100Ah",
+    "12V-200Ah",
+    "48V-100Ah",
+    "48V-200Ah"
+  ]);
+  assert.deepEqual(inverters, [
+    "12V-1000W",
+    "12V-3000W",
+    "48V-10000W",
+    "48V-3000W",
+    "48V-5000W"
+  ]);
+  assert.equal(
+    catalog.components.find(({ id }) => id === "inverter-12v-3000w").name,
+    "12V 3kW Inverter"
+  );
 });
 
 test("wire physical properties derive from Manhattan grid length", () => {
@@ -169,10 +201,24 @@ test("a connected inverter applies idle drain each tick", () => {
   const battery = next.components.find(({ id }) => id === "battery");
   const inverter = next.components.find(({ id }) => id === "inverter");
 
-  assert.equal(battery.state.currentAmps, 25 / 12);
-  assert.ok(Math.abs(battery.state.energyWh - (960 - 25 / 60)) < 1e-9);
+  assert.ok(battery.state.currentAmps > 1.9 && battery.state.currentAmps < 2.1);
+  assert.ok(
+    Math.abs((960 - battery.state.energyWh) - battery.state.powerWatts / 60) < 1e-9
+  );
   assert.ok(battery.state.temperatureC > 20);
   assert.equal(inverter.state.heatWatts, 25);
+  const wireHeatWatts = next.wires.reduce(
+    (total, connection) => total + connection.state.heatWatts,
+    0
+  );
+  assert.ok(
+    Math.abs(
+      battery.state.powerWatts -
+      inverter.state.powerWatts -
+      battery.state.heatWatts -
+      wireHeatWatts
+    ) < 0.01
+  );
   assert.ok(inverter.state.temperatureC > battery.state.temperatureC);
   assert.ok(next.wires.every(({ state }) => state.temperatureC >= 20));
   assert.deepEqual(next.report.operatingInverterIds, ["inverter"]);
@@ -196,14 +242,14 @@ test("a battery short naturally produces high current and rapid drain", () => {
   ];
 
   const evaluated = evaluateCircuit(snapshot(components, wires));
-  assert.ok(evaluated.currents.get("battery") < 600);
-  assert.ok(evaluated.currents.get("battery") > 590);
+  assert.ok(evaluated.currents.get("battery") < 630);
+  assert.ok(evaluated.currents.get("battery") > 620);
   assert.ok(evaluated.wireMetrics.get("short").heatWatts > 0);
   assert.equal(evaluated.hazards[0].type, "dc-short");
 
   const next = simulateTick(snapshot(components, wires), 1);
-  assert.ok(next.components[0].state.energyWh > 840);
-  assert.ok(next.components[0].state.energyWh < 841);
+  assert.ok(next.components[0].state.energyWh > 827);
+  assert.ok(next.components[0].state.energyWh < 829);
   assert.ok(next.components[0].state.temperatureC > 38);
   assert.ok(next.wires[0].state.temperatureC > 70);
 });
@@ -254,11 +300,11 @@ test("two cross-connected batteries form a hot closed source loop", (context) =>
       total + wirePhysicalProperties(catalog, components, connection).resistanceOhms,
     0
   );
-  const expectedCurrent = 24 / (0.04 + totalWireResistance);
+  const expectedCurrent = 25.2 / (0.04 + totalWireResistance);
 
   assert.equal(evaluated.hazards[0].type, "battery-loop-short");
   assert.ok(Math.abs(firstCurrent - expectedCurrent) < 1e-9);
-  assert.equal(firstCurrent, secondCurrent);
+  assert.ok(Math.abs(firstCurrent - secondCurrent) < 1e-9);
   assert.ok(evaluated.wireMetrics.get("cross-a").heatWatts > 0);
   assert.ok(evaluated.wireMetrics.get("cross-b").heatWatts > 0);
   assert.equal(evaluated.wireMetrics.get("dangling").currentAmps, 0);
@@ -288,8 +334,8 @@ test("one cross-wire between two batteries remains an open circuit", () => {
   ];
 
   const result = evaluateCircuit(snapshot(components, wires));
-  assert.equal(result.currents.get("battery-a"), 0);
-  assert.equal(result.currents.get("battery-b"), 0);
+  assert.ok(Math.abs(result.currents.get("battery-a")) < 1e-9);
+  assert.ok(Math.abs(result.currents.get("battery-b")) < 1e-9);
   assert.equal(result.wireMetrics.get("open-cross").currentAmps, 0);
   assert.equal(result.hazards.length, 0);
 });
@@ -306,7 +352,7 @@ test("reversed inverter polarity is allowed and reported as a hazard", () => {
 
   const result = evaluateCircuit(snapshot(components, wires));
   assert.equal(result.hazards[0].type, "reversed-polarity");
-  assert.equal(result.currents.get("battery"), 0);
+  assert.ok(Math.abs(result.currents.get("battery")) < 1e-9);
 });
 
 test("an incompatible source voltage reports a mismatch", () => {
@@ -329,7 +375,7 @@ test("an incompatible source voltage reports a mismatch", () => {
     elapsedMinutes: 0
   });
   assert.equal(result.hazards[0].type, "voltage-mismatch");
-  assert.equal(result.currents.get("battery"), 0);
+  assert.ok(Math.abs(result.currents.get("battery")) < 1e-9);
 });
 
 test("joining AC and DC terminals reports a mixed-domain hazard", () => {
@@ -350,6 +396,38 @@ test("the configured tick duration advances simulated time", () => {
   const next = simulateTick(snapshot([component("battery", batteryDefinition)], []), 15);
   assert.equal(next.elapsedMinutes, 15);
   assert.equal(next.components[0].state.energyWh, 960);
+});
+
+test("reset restores battery charge, ambient temperatures, and elapsed time", () => {
+  const battery = component("battery", batteryDefinition);
+  battery.state.energyWh = 180;
+  battery.state.stateOfCharge = 0.15;
+  battery.state.temperatureC = 72;
+  const inverter = component("inverter", inverterDefinition);
+  inverter.state.temperatureC = 48;
+  const connection = wire(
+    "positive",
+    "battery",
+    "positive",
+    "inverter",
+    "dc-positive"
+  );
+  connection.state = { temperatureC: 90, currentAmps: 20, heatWatts: 5 };
+
+  const reset = resetSimulation({
+    ...snapshot([battery, inverter], [connection], 15),
+    elapsedMinutes: 240
+  });
+  const resetBattery = reset.components.find(({ id }) => id === "battery");
+
+  assert.equal(reset.elapsedMinutes, 0);
+  assert.equal(resetBattery.state.stateOfCharge, 0.8);
+  assert.equal(resetBattery.state.energyWh, 960);
+  assert.ok(reset.components.every(({ state }) => state.temperatureC === 15));
+  assert.ok(reset.wires.every(({ state }) => state.temperatureC === 15));
+  assert.ok(reset.components.every(({ state }) => state.powerWatts === 0));
+  assert.equal(reset.wires[0].from.componentId, "battery");
+  assert.equal(reset.wires[0].to.componentId, "inverter");
 });
 
 test("numerically calibrates bulb cooling to a 2750 C peak", (context) => {
@@ -396,7 +474,7 @@ test("a 100 W light runs from 80 to 20 percent with only marginal battery warmin
   for (const [id, temperatureC] of Object.entries(peakTemperatures)) {
     context.diagnostic(`${id} peak: ${temperatureC.toFixed(2)} °C`);
   }
-  assert.ok(system.elapsedMinutes >= 315 && system.elapsedMinutes <= 320);
+  assert.ok(system.elapsedMinutes >= 310 && system.elapsedMinutes <= 315);
   assert.ok(peakTemperatures.battery < 21);
   assert.ok(peakTemperatures.battery > 20);
   assert.ok(peakTemperatures.inverter > peakTemperatures.battery);
@@ -422,10 +500,52 @@ test("a light wired with reversed AC terminals still operates and heats", () => 
   const next = simulateTick(snapshot(components, wires), 1);
   const light = next.components.find(({ id }) => id === "light");
 
-  assert.equal(light.state.powerWatts, 100);
-  assert.equal(light.state.heatWatts, 100);
+  assert.ok(Math.abs(light.state.powerWatts - 100) < 0.01);
+  assert.ok(Math.abs(light.state.heatWatts - 100) < 0.01);
   assert.ok(light.state.temperatureC > 20);
   assert.deepEqual(next.report.operatingLoadIds, ["light"]);
+});
+
+test("a connected hair dryer draws 1200 W and heats", () => {
+  const components = [
+    component("battery", batteryDefinition, 0, 120),
+    component("inverter", inverterDefinition, 240, 120),
+    component("hair-dryer", hairDryerDefinition, 480, 120)
+  ];
+  const wires = [
+    wire("dc-positive", "battery", "positive", "inverter", "dc-positive"),
+    wire("dc-negative", "battery", "negative", "inverter", "dc-negative"),
+    wire("ac-line", "inverter", "ac-line", "hair-dryer", "ac-line"),
+    wire("ac-neutral", "inverter", "ac-neutral", "hair-dryer", "ac-neutral")
+  ];
+
+  const next = simulateTick(snapshot(components, wires), 1);
+  const hairDryer = next.components.find(({ id }) => id === "hair-dryer");
+
+  assert.ok(Math.abs(hairDryer.state.powerWatts - 1200) < 0.1);
+  assert.ok(hairDryer.state.temperatureC > 20);
+  assert.deepEqual(next.report.operatingLoadIds, ["hair-dryer"]);
+});
+
+test("a connected fridge draws 400 W and heats", () => {
+  const components = [
+    component("battery", batteryDefinition, 0, 120),
+    component("inverter", inverterDefinition, 240, 120),
+    component("fridge", fridgeDefinition, 480, 120)
+  ];
+  const wires = [
+    wire("dc-positive", "battery", "positive", "inverter", "dc-positive"),
+    wire("dc-negative", "battery", "negative", "inverter", "dc-negative"),
+    wire("ac-line", "inverter", "ac-line", "fridge", "ac-line"),
+    wire("ac-neutral", "inverter", "ac-neutral", "fridge", "ac-neutral")
+  ];
+
+  const next = simulateTick(snapshot(components, wires), 1);
+  const fridge = next.components.find(({ id }) => id === "fridge");
+
+  assert.ok(Math.abs(fridge.state.powerWatts - 400) < 0.1);
+  assert.ok(fridge.state.temperatureC > 20);
+  assert.deepEqual(next.report.operatingLoadIds, ["fridge"]);
 });
 
 test("two 100 W incandescent lights in series each operate at reduced power and heat", () => {
@@ -449,8 +569,8 @@ test("two 100 W incandescent lights in series each operate at reduced power and 
 
   // Each rated bulb is 144 Ω. Two in series draw 120 V / 288 Ω,
   // so each dissipates I²R = 25 W.
-  assert.ok(Math.abs(firstLight.state.powerWatts - 25) < 1e-9);
-  assert.ok(Math.abs(secondLight.state.powerWatts - 25) < 1e-9);
+  assert.ok(Math.abs(firstLight.state.powerWatts - 25) < 0.01);
+  assert.ok(Math.abs(secondLight.state.powerWatts - 25) < 0.01);
   assert.ok(firstLight.state.temperatureC > 20);
   assert.ok(secondLight.state.temperatureC > 20);
   assert.deepEqual(

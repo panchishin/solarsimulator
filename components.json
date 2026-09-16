@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "simulation": {
     "ambientTemperatureC": 20,
-    "coolingCoefficientPerMinute": 0.02746826,
+    "coolingCoefficientPerMinute": 0.02746704,
     "metersPerGridSpace": 0.1
   },
   "components": [
@@ -30,14 +30,126 @@
         "capacityWh": 1200,
         "startingStateOfCharge": 0.8,
         "internalResistanceOhms": 0.02,
+        "openCircuitVoltageCurve": [
+          { "stateOfCharge": 0, "voltage": 11.4 },
+          { "stateOfCharge": 0.2, "voltage": 11.8 },
+          { "stateOfCharge": 0.5, "voltage": 12.2 },
+          { "stateOfCharge": 0.8, "voltage": 12.6 },
+          { "stateOfCharge": 1, "voltage": 12.8 }
+        ],
         "massKg": 25,
+        "specificHeatJPerKgC": 900
+      }
+    },
+    {
+      "id": "battery-12v-200ah",
+      "group": "battery",
+      "name": "12V 200Ah Battery",
+      "description": "A higher-capacity battery for a 12 volt home power system.",
+      "gridSize": { "width": 4, "height": 3 },
+      "specifications": {
+        "Voltage": "12 V DC",
+        "Capacity": "200 Ah / 2,400 Wh",
+        "Starting charge": "80%",
+        "Weight": "50 kg",
+        "Internal resistance": "0.01 Ω"
+      },
+      "terminals": [
+        { "id": "positive", "label": "+", "role": "dc-positive", "domain": "dc", "edge": "right", "offset": 0.3 },
+        { "id": "negative", "label": "−", "role": "dc-negative", "domain": "dc", "edge": "right", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "battery",
+        "voltage": 12,
+        "capacityAh": 200,
+        "capacityWh": 2400,
+        "startingStateOfCharge": 0.8,
+        "internalResistanceOhms": 0.01,
+        "openCircuitVoltageCurve": [
+          { "stateOfCharge": 0, "voltage": 11.4 },
+          { "stateOfCharge": 0.2, "voltage": 11.8 },
+          { "stateOfCharge": 0.5, "voltage": 12.2 },
+          { "stateOfCharge": 0.8, "voltage": 12.6 },
+          { "stateOfCharge": 1, "voltage": 12.8 }
+        ],
+        "massKg": 50,
+        "specificHeatJPerKgC": 900
+      }
+    },
+    {
+      "id": "battery-48v-100ah",
+      "group": "battery",
+      "name": "48V 100Ah Battery",
+      "description": "A 48 volt battery for higher-power home systems.",
+      "gridSize": { "width": 5, "height": 3 },
+      "specifications": {
+        "Voltage": "48 V DC",
+        "Capacity": "100 Ah / 4,800 Wh",
+        "Starting charge": "80%",
+        "Weight": "100 kg",
+        "Internal resistance": "0.08 Ω"
+      },
+      "terminals": [
+        { "id": "positive", "label": "+", "role": "dc-positive", "domain": "dc", "edge": "right", "offset": 0.3 },
+        { "id": "negative", "label": "−", "role": "dc-negative", "domain": "dc", "edge": "right", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "battery",
+        "voltage": 48,
+        "capacityAh": 100,
+        "capacityWh": 4800,
+        "startingStateOfCharge": 0.8,
+        "internalResistanceOhms": 0.08,
+        "openCircuitVoltageCurve": [
+          { "stateOfCharge": 0, "voltage": 45.6 },
+          { "stateOfCharge": 0.2, "voltage": 47.2 },
+          { "stateOfCharge": 0.5, "voltage": 48.8 },
+          { "stateOfCharge": 0.8, "voltage": 50.4 },
+          { "stateOfCharge": 1, "voltage": 51.2 }
+        ],
+        "massKg": 100,
+        "specificHeatJPerKgC": 900
+      }
+    },
+    {
+      "id": "battery-48v-200ah",
+      "group": "battery",
+      "name": "48V 200Ah Battery",
+      "description": "A high-capacity 48 volt battery for large home systems.",
+      "gridSize": { "width": 5, "height": 3 },
+      "specifications": {
+        "Voltage": "48 V DC",
+        "Capacity": "200 Ah / 9,600 Wh",
+        "Starting charge": "80%",
+        "Weight": "200 kg",
+        "Internal resistance": "0.04 Ω"
+      },
+      "terminals": [
+        { "id": "positive", "label": "+", "role": "dc-positive", "domain": "dc", "edge": "right", "offset": 0.3 },
+        { "id": "negative", "label": "−", "role": "dc-negative", "domain": "dc", "edge": "right", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "battery",
+        "voltage": 48,
+        "capacityAh": 200,
+        "capacityWh": 9600,
+        "startingStateOfCharge": 0.8,
+        "internalResistanceOhms": 0.04,
+        "openCircuitVoltageCurve": [
+          { "stateOfCharge": 0, "voltage": 45.6 },
+          { "stateOfCharge": 0.2, "voltage": 47.2 },
+          { "stateOfCharge": 0.5, "voltage": 48.8 },
+          { "stateOfCharge": 0.8, "voltage": 50.4 },
+          { "stateOfCharge": 1, "voltage": 51.2 }
+        ],
+        "massKg": 200,
         "specificHeatJPerKgC": 900
       }
     },
     {
       "id": "inverter-12v-3000w",
       "group": "inverter",
-      "name": "3000W Inverter",
+      "name": "12V 3kW Inverter",
       "description": "Converts 12 volt battery power to 120 volt AC power.",
       "gridSize": { "width": 5, "height": 4 },
       "specifications": {
@@ -67,6 +179,134 @@
       }
     },
     {
+      "id": "inverter-12v-1000w",
+      "group": "inverter",
+      "name": "12V 1kW Inverter",
+      "description": "A compact 12 volt inverter for lighter AC loads.",
+      "gridSize": { "width": 5, "height": 4 },
+      "specifications": {
+        "DC input": "12 V DC",
+        "AC output": "120 V / 60 Hz",
+        "Continuous output": "1,000 W",
+        "Idle draw": "12 W",
+        "Efficiency": "90%",
+        "Weight": "6 kg"
+      },
+      "terminals": [
+        { "id": "dc-positive", "label": "DC +", "role": "dc-positive", "domain": "dc", "edge": "left", "offset": 0.3 },
+        { "id": "dc-negative", "label": "DC −", "role": "dc-negative", "domain": "dc", "edge": "left", "offset": 0.7 },
+        { "id": "ac-line", "label": "AC L", "role": "ac-line", "domain": "ac", "edge": "right", "offset": 0.3 },
+        { "id": "ac-neutral", "label": "AC N", "role": "ac-neutral", "domain": "ac", "edge": "right", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "inverter",
+        "inputVoltage": 12,
+        "outputVoltage": 120,
+        "outputFrequencyHz": 60,
+        "maxOutputWatts": 1000,
+        "idleDrawWatts": 12,
+        "efficiency": 0.9,
+        "massKg": 6,
+        "specificHeatJPerKgC": 900
+      }
+    },
+    {
+      "id": "inverter-48v-3000w",
+      "group": "inverter",
+      "name": "48V 3kW Inverter",
+      "description": "A 48 volt inverter for medium home power systems.",
+      "gridSize": { "width": 5, "height": 4 },
+      "specifications": {
+        "DC input": "48 V DC",
+        "AC output": "120 V / 60 Hz",
+        "Continuous output": "3,000 W",
+        "Idle draw": "25 W",
+        "Efficiency": "90%",
+        "Weight": "12 kg"
+      },
+      "terminals": [
+        { "id": "dc-positive", "label": "DC +", "role": "dc-positive", "domain": "dc", "edge": "left", "offset": 0.3 },
+        { "id": "dc-negative", "label": "DC −", "role": "dc-negative", "domain": "dc", "edge": "left", "offset": 0.7 },
+        { "id": "ac-line", "label": "AC L", "role": "ac-line", "domain": "ac", "edge": "right", "offset": 0.3 },
+        { "id": "ac-neutral", "label": "AC N", "role": "ac-neutral", "domain": "ac", "edge": "right", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "inverter",
+        "inputVoltage": 48,
+        "outputVoltage": 120,
+        "outputFrequencyHz": 60,
+        "maxOutputWatts": 3000,
+        "idleDrawWatts": 25,
+        "efficiency": 0.9,
+        "massKg": 12,
+        "specificHeatJPerKgC": 900
+      }
+    },
+    {
+      "id": "inverter-48v-5000w",
+      "group": "inverter",
+      "name": "48V 5kW Inverter",
+      "description": "A 48 volt inverter for larger household loads.",
+      "gridSize": { "width": 5, "height": 4 },
+      "specifications": {
+        "DC input": "48 V DC",
+        "AC output": "120 V / 60 Hz",
+        "Continuous output": "5,000 W",
+        "Idle draw": "40 W",
+        "Efficiency": "90%",
+        "Weight": "18 kg"
+      },
+      "terminals": [
+        { "id": "dc-positive", "label": "DC +", "role": "dc-positive", "domain": "dc", "edge": "left", "offset": 0.3 },
+        { "id": "dc-negative", "label": "DC −", "role": "dc-negative", "domain": "dc", "edge": "left", "offset": 0.7 },
+        { "id": "ac-line", "label": "AC L", "role": "ac-line", "domain": "ac", "edge": "right", "offset": 0.3 },
+        { "id": "ac-neutral", "label": "AC N", "role": "ac-neutral", "domain": "ac", "edge": "right", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "inverter",
+        "inputVoltage": 48,
+        "outputVoltage": 120,
+        "outputFrequencyHz": 60,
+        "maxOutputWatts": 5000,
+        "idleDrawWatts": 40,
+        "efficiency": 0.9,
+        "massKg": 18,
+        "specificHeatJPerKgC": 900
+      }
+    },
+    {
+      "id": "inverter-48v-10000w",
+      "group": "inverter",
+      "name": "48V 10kW Inverter",
+      "description": "A high-power 48 volt inverter for large home systems.",
+      "gridSize": { "width": 6, "height": 4 },
+      "specifications": {
+        "DC input": "48 V DC",
+        "AC output": "120 V / 60 Hz",
+        "Continuous output": "10,000 W",
+        "Idle draw": "75 W",
+        "Efficiency": "90%",
+        "Weight": "30 kg"
+      },
+      "terminals": [
+        { "id": "dc-positive", "label": "DC +", "role": "dc-positive", "domain": "dc", "edge": "left", "offset": 0.3 },
+        { "id": "dc-negative", "label": "DC −", "role": "dc-negative", "domain": "dc", "edge": "left", "offset": 0.7 },
+        { "id": "ac-line", "label": "AC L", "role": "ac-line", "domain": "ac", "edge": "right", "offset": 0.3 },
+        { "id": "ac-neutral", "label": "AC N", "role": "ac-neutral", "domain": "ac", "edge": "right", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "inverter",
+        "inputVoltage": 48,
+        "outputVoltage": 120,
+        "outputFrequencyHz": 60,
+        "maxOutputWatts": 10000,
+        "idleDrawWatts": 75,
+        "efficiency": 0.9,
+        "massKg": 30,
+        "specificHeatJPerKgC": 900
+      }
+    },
+    {
       "id": "load-light-100w",
       "group": "load",
       "name": "100W Light Bulb",
@@ -88,6 +328,56 @@
         "powerWatts": 100,
         "massKg": 0.1,
         "specificHeatJPerKgC": 800
+      }
+    },
+    {
+      "id": "load-hair-dryer-1200w",
+      "group": "load",
+      "name": "1200W Hair Dryer",
+      "description": "A high-power 120 volt resistive household load.",
+      "gridSize": { "width": 4, "height": 3 },
+      "specifications": {
+        "Supply": "120 V AC",
+        "Power": "1,200 W",
+        "Resistance": "12 Ω",
+        "Weight": "0.8 kg",
+        "Specific heat": "1,000 J/(kg·°C)"
+      },
+      "terminals": [
+        { "id": "ac-line", "label": "AC L", "role": "ac-line", "domain": "ac", "edge": "left", "offset": 0.3 },
+        { "id": "ac-neutral", "label": "AC N", "role": "ac-neutral", "domain": "ac", "edge": "left", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "load",
+        "voltage": 120,
+        "powerWatts": 1200,
+        "massKg": 0.8,
+        "specificHeatJPerKgC": 1000
+      }
+    },
+    {
+      "id": "load-fridge-400w",
+      "group": "load",
+      "name": "400W Fridge",
+      "description": "A simplified continuous 400 watt refrigerator load.",
+      "gridSize": { "width": 4, "height": 4 },
+      "specifications": {
+        "Supply": "120 V AC",
+        "Power": "400 W continuous equivalent",
+        "Resistance": "36 Ω",
+        "Weight": "50 kg",
+        "Specific heat": "1,000 J/(kg·°C)"
+      },
+      "terminals": [
+        { "id": "ac-line", "label": "AC L", "role": "ac-line", "domain": "ac", "edge": "left", "offset": 0.3 },
+        { "id": "ac-neutral", "label": "AC N", "role": "ac-neutral", "domain": "ac", "edge": "left", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "load",
+        "voltage": 120,
+        "powerWatts": 400,
+        "massKg": 50,
+        "specificHeatJPerKgC": 1000
       }
     }
   ],
