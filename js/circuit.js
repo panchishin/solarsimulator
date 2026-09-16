@@ -4,6 +4,7 @@ import {
 } from "./simulation.js";
 
 const GRID_SIZE = 24;
+const FIRE_TEMPERATURE_C = 140;
 
 const byId = (id) => document.getElementById(id);
 
@@ -112,6 +113,12 @@ export class CircuitEditor {
     element.style.height = `${size.height * GRID_SIZE}px`;
     if (this.selection?.type === "component" && this.selection.id === component.id) element.classList.add("selected");
     if (this.hazardComponentIds().has(component.id)) element.classList.add("hazard");
+    if (
+      definition.model.type !== "load" &&
+      (component.state?.temperatureC ?? this.getAmbientTemperature()) > FIRE_TEMPERATURE_C
+    ) {
+      element.classList.add("on-fire");
+    }
 
     const name = document.createElement("span");
     name.className = "component-name";
@@ -358,6 +365,9 @@ export class CircuitEditor {
         element.setAttribute("y2", to.y);
       }
       if (hazardIds.has(wire.id)) line.classList.add("hazard");
+      if ((wire.state?.temperatureC ?? this.getAmbientTemperature()) > FIRE_TEMPERATURE_C) {
+        line.classList.add("on-fire");
+      }
       if (this.selection?.type === "wire" && this.selection.id === wire.id) line.classList.add("selected");
       hit.addEventListener("click", (event) => {
         event.stopPropagation();

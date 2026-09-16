@@ -197,6 +197,14 @@ h3 { margin-bottom: 0.65rem; font-size: 0.95rem; }
 .wire-hit { stroke: transparent; stroke-width: 16; fill: none; pointer-events: stroke; cursor: pointer; }
 .wire.selected { stroke: var(--accent); stroke-width: 6; }
 .wire.hazard { stroke: var(--hazard); stroke-dasharray: 8 5; }
+.wire.on-fire {
+  stroke: #ff7a00;
+  stroke-width: 9;
+  stroke-linecap: round;
+  stroke-dasharray: 2 10 6 7;
+  filter: drop-shadow(0 0 2px #fff36b) drop-shadow(0 0 6px #e82700);
+  animation: wire-fire 0.45s linear infinite;
+}
 .wire.preview { display: none; stroke-dasharray: 6 5; opacity: 0.75; }
 
 .circuit-component {
@@ -214,8 +222,48 @@ h3 { margin-bottom: 0.65rem; font-size: 0.95rem; }
 }
 .circuit-component.selected { outline: 4px solid color-mix(in srgb, var(--accent) 45%, transparent); }
 .circuit-component.hazard { border-color: var(--hazard); box-shadow: 3px 3px 0 var(--hazard); }
+.circuit-component.on-fire:not(.load-component) {
+  border-color: #e82700;
+  box-shadow: 0 0 8px #ffb000, 0 0 18px color-mix(in srgb, #e82700 70%, transparent);
+}
+.circuit-component.on-fire:not(.load-component)::before,
+.circuit-component.on-fire:not(.load-component)::after {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  bottom: calc(100% - 7px);
+  width: 52%;
+  height: 42px;
+  pointer-events: none;
+  transform-origin: 50% 100%;
+  clip-path: polygon(0 100%, 8% 56%, 23% 75%, 30% 12%, 44% 63%, 58% 0, 67% 70%, 84% 28%, 100% 100%);
+  background: linear-gradient(to top, #e82700 8%, #ff7a00 48%, #fff36b 82%, transparent 83%);
+  filter: drop-shadow(0 -2px 3px color-mix(in srgb, #e82700 75%, transparent));
+  animation: component-fire 0.55s ease-in-out infinite alternate;
+}
+.circuit-component.on-fire:not(.load-component)::before { left: 2%; }
+.circuit-component.on-fire:not(.load-component)::after {
+  right: 2%;
+  animation-delay: -0.3s;
+  transform: scaleX(-1);
+}
 .component-name { max-width: 100%; text-align: center; font-size: 0.82rem; font-weight: 850; line-height: 1.2; }
 .component-reading { margin-top: 0.35rem; color: var(--muted); font-size: 0.7rem; font-variant-numeric: tabular-nums; }
+
+@keyframes wire-fire {
+  to { stroke-dashoffset: -25; filter: drop-shadow(0 0 4px #fff36b) drop-shadow(0 0 9px #e82700); }
+}
+
+@keyframes component-fire {
+  from { transform: skewX(-5deg) scaleY(0.88); opacity: 0.82; }
+  to { transform: skewX(6deg) scaleY(1.12); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wire.on-fire,
+  .circuit-component.on-fire:not(.load-component)::before,
+  .circuit-component.on-fire:not(.load-component)::after { animation: none; }
+}
 
 .terminal {
   position: absolute;
