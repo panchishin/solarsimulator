@@ -26,6 +26,9 @@ export class SolveContext {
     this.settings = settings;
     this.world = world;
     this.voltages = new Float64Array(nodeCount);
+    // The solution at the end of the previous accepted step, which is what a capacitor's charge
+    // is a memory of. Null until the first operating point has been found.
+    this.previousVoltages = null;
     this.residual = new Float64Array(nodeCount);
     this.system = new SparseSystem(nodeCount);
     this.device = null;
@@ -67,6 +70,16 @@ export class SolveContext {
     return this.voltage(fromPort) - this.voltage(toPort);
   }
 
+  /** The same voltage difference at the end of the previous step. */
+  acrossPrevious(fromPort, toPort) {
+    if (this.previousVoltages === null) return this.across(fromPort, toPort);
+    const from = this.node(fromPort);
+    const to = this.node(toPort);
+    return (
+      (from < 0 ? 0 : this.previousVoltages[from]) - (to < 0 ? 0 : this.previousVoltages[to])
+    );
+  }
+
   /** Temperature of one of the current device's thermal nodes, degC. */
   temperature(nodeName) {
     return this.device.thermal.temperature(nodeName);
@@ -104,6 +117,28 @@ export class SolveContext {
   conductance(fromPort, toPort, g) {
     const drop = this.across(fromPort, toPort);
     this.current(fromPort, toPort, g * drop, [
+      [fromPort, g],
+      [toPort, -g]
+    ]);
+  }
+
+  /**
+   * A capacitance between two ports, as its backward-Euler companion model: a conductance C/dt
+   * in parallel with a current source that remembers the previous step's voltage.
+   *
+   * A capacitor is the only thing that gives a node a voltage when nothing is driving it, which
+   * is exactly the situation a converter is in the instant its supply is disconnected. Without
+   * one, that node's voltage is whatever the rest of the circuit's residual happens to allow, and
+   * a switching converter's constant-power input has no operating point there at all. With one,
+   * the node starts from the charge it had and discharges into whatever is drawing from it.
+   *
+   * At `dt = 0` this is an open circuit, which is what makes the first solve a DC operating point.
+   */
+  capacitance(fromPort, toPort, farads) {
+    if (!(farads > 0) || !(this.dt > 0)) return;
+    const g = farads / this.dt;
+    const change = this.across(fromPort, toPort) - this.acrossPrevious(fromPort, toPort);
+    this.current(fromPort, toPort, g * change, [
       [fromPort, g],
       [toPort, -g]
     ]);

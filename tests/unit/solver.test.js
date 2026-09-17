@@ -226,7 +226,9 @@ test("miswiring the AC output onto the DC bus stops the inverter from starting",
   assert.equal(world.measure("inv").operating, false);
   assert.equal(world.measure("inv").tripReason, "dc-under-voltage");
   assert.equal(world.measure("inv").outputWatts, 0);
-  assert.ok(Math.abs(world.measure("bat").currentAmps) < 1e-6);
+  // The only current is the inverter's own input discharge resistor, a fraction of a milliamp.
+  const packAmps = world.measure("bat").currentAmps;
+  assert.ok(Math.abs(packAmps) < 1e-3, `${packAmps} A`);
   assert.equal(world.measure("bat").contactorClosed, true, "the pack was never over-stressed");
 
   const types = world.hazards().map((hazard) => hazard.type);

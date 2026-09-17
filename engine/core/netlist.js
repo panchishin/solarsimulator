@@ -67,13 +67,20 @@ export function buildNetlist({ catalog, layout, devices }) {
     }
   }
 
+  // A connection naming a terminal that does not exist is a broken layout, not an open circuit.
+  // Silently dropping it produces a plausible-looking answer for a circuit nobody described.
+  const endpoint = (reference, what) => {
+    const key = terminalKey(reference.componentId, reference.terminalId);
+    if (!terminalDomain.has(key)) {
+      throw new RangeError(`${what} connects to "${key}", which does not exist`);
+    }
+    return key;
+  };
+
   // Direct terminal-to-terminal joins are ideal connections with no conductor. The editor
   // never produces them; test fixtures and validation cases use them to isolate one device.
   for (const [first, second] of layout.joins ?? []) {
-    unionFind.union(
-      terminalKey(first.componentId, first.terminalId),
-      terminalKey(second.componentId, second.terminalId)
-    );
+    unionFind.union(endpoint(first, "a join"), endpoint(second, "a join"));
   }
 
   const nets = [];

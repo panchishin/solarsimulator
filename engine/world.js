@@ -213,12 +213,18 @@ export class World {
     return Math.hypot(dx, dy);
   }
 
-  solveNow() {
+  /**
+   * Solve the network. `dt` is the length of the step this operating point belongs to, which is
+   * what any capacitance in the circuit integrates over; `dt = 0` is a DC operating point, with
+   * every capacitor an open circuit.
+   */
+  solveNow(dt = 0) {
     this.environmentSample = this.environment.at(this.timeSeconds);
     this.thermalNetwork.ambientC = this.environmentSample.ambientTemperatureC;
     this.thermalNetwork.windSpeedMPerS = this.environmentSample.windSpeedMPerS;
     this.lastSolution = this.solver.solve({
       timeSeconds: this.timeSeconds,
+      dt,
       environment: this.environmentSample,
       ambientC: this.environmentSample.ambientTemperatureC
     });
@@ -315,7 +321,13 @@ export class World {
    * event functions that changed sign, which the integrator bisects before applying.
    */
   stepFixed(dt) {
-    const solution = this.solveNow();
+    // The charge on a capacitor has to start somewhere: the first step is preceded by a DC
+    // operating point, the way a transient analysis is.
+    if (this.context.previousVoltages === null) {
+      this.solveNow(0);
+      this.context.previousVoltages = Float64Array.from(this.context.voltages);
+    }
+    const solution = this.solveNow(dt);
     const before = this.eventValues();
     const chargeBefore = new Map();
     for (const device of this.devices) {
@@ -402,6 +414,7 @@ export class World {
     }
     this.violations = violations;
     this.timeSeconds += dt;
+    this.context.previousVoltages = Float64Array.from(this.context.voltages);
 
     return {
       dt,
@@ -452,6 +465,10 @@ export class World {
     return {
       timeSeconds: this.timeSeconds,
       voltages: Float64Array.from(this.context.voltages),
+      previousVoltages:
+        this.context.previousVoltages === null
+          ? null
+          : Float64Array.from(this.context.previousVoltages),
       temperatures: this.thermalNetwork.temperatures(),
       devices: this.devices.map((device) => ({
         id: device.id,
@@ -467,6 +484,8 @@ export class World {
   restore(snapshot) {
     this.timeSeconds = snapshot.timeSeconds;
     this.context.voltages = Float64Array.from(snapshot.voltages);
+    this.context.previousVoltages =
+      snapshot.previousVoltages === null ? null : Float64Array.from(snapshot.previousVoltages);
     this.thermalNetwork.restoreTemperatures(snapshot.temperatures);
     for (const entry of snapshot.devices) {
       const device = this.deviceById.get(entry.id);

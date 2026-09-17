@@ -53,6 +53,23 @@ residual; this is the standard damped-Newton safeguard for circuit solvers
 `gminSiemens` connects every node to its island reference. It keeps the matrix non-singular
 when a branch opens and represents real insulation leakage (`ref:vlach-singhal`).
 
+The network is otherwise resistive: the solve is the operating point at one instant, and every
+state (charge, temperature, damage) is integrated outside it. The one exception is capacitance,
+which is stamped as its backward-Euler companion model over the step being taken:
+
+```
+i = (C/dt)·(v − v_prev),        ∂i/∂v = C/dt
+```
+
+with `v_prev` the converged voltage at the end of the previous step and `dt = 0` (the first
+solve, and any operating-point solve) making the capacitor an open circuit. A capacitor is the
+only element that gives a node a voltage when nothing is driving it, and that is exactly the
+situation a converter's input is in the instant its supply opens. Without one, the node's
+voltage is whatever the residual happens to tolerate, and a constant-power input has no
+operating point there at all: the iteration walks off to kilovolts looking for one. The power
+into the companion model is reported as the device's stored power, so the energy balance of
+section 1.4 sees the same quantity the port currents do.
+
 ### 1.5 What the solver requires of a device characteristic
 
 `i(V)` must be continuous, and its stamped derivative must be the derivative of the current it
@@ -369,26 +386,82 @@ voltage — the reason a PWM controller loses energy on a 36-cell panel is emerg
 DC input current for AC output power `P_ac`:
 
 ```
-P_dc = P_idle + P_ac / η(f, T),   f = P_ac / P_rated
+P_dc = w·P_idle + P_ac / η(f, T),   f = P_ac / P_rated
 I_dc = P_dc / V_dc
 ```
 
 `η(f)` is interpolated from the datasheet efficiency curve and shifted by
-`efficiencyTempCoefficientPerC`. AC side is a Thevenin source: regulated `V_set` behind
-`outputResistanceOhms`, so voltage sags with load and with DC-side collapse
-(`V_set` scales with the available DC power when the DC bus cannot support the demand).
+`efficiencyTempCoefficientPerC`. Terminal efficiency is always below the curve, because the
+no-load draw and the loss in the output impedance both sit outside it: at 1,453 W the 12 V
+1,000 W unit measures 88.7 % against a published 90.5 % at that load fraction, and the
+difference is 8 W of idle draw plus 22.7 W in `outputResistanceOhms`. At 10 W of load the same
+inverter runs at 49 %, because the no-load draw is then most of the input.
 
-Protection:
+### 7.1 Output ceiling
 
-- `maxOutputWatts` is enforced by an inverse-time accumulator on the same log-log curve
-  machinery as breakers (`ref:victron-multiplus`).
-- Under/over DC voltage trip at the catalog thresholds and restart only after the restart
-  threshold is recrossed.
-- Heatsink temperature above `derateStartC` scales `P_rated` linearly to zero at
-  `derateEndC`; above `shutdownC` the inverter turns off.
-- Reverse DC polarity puts the H-bridge body diodes across the input: a diode branch
-  conducting for `V_dc < 0` with the catalog's series resistance. The resulting fault current
-  is what blows an upstream fuse.
+The AC side is a Thevenin source: `V_set` behind `outputResistanceOhms`. The set point is not a
+constant, because a bridge and transformer are wound to hold the output at the lowest input
+voltage the inverter is rated for, which is its own under-voltage cutoff. That ratio is the
+hardware, so the largest output it can synthesise is
+
+```
+V_ceiling = V_out_nominal · V_dc / V_undervoltage_trip
+V_set     = softMin(V_out_nominal, V_ceiling, outputRegulationBandVolts) · w
+```
+
+Above the cutoff there is headroom and the regulator holds the set point; below it the output
+droops with the bus. `∂V_set/∂V_dc` is in the Jacobian, so the AC output and the DC draw
+collapse together inside one solve. Assuming instead that 120 V is always available makes the
+input a constant-power sink on a bus that cannot support it, which has no solution at all.
+
+`w` is how much of its input window the bus is inside:
+
+```
+w = ramp((V_overvoltage_trip − V_dc) / (V_overvoltage_trip − V_overvoltage_restart))
+```
+
+Above the input over-voltage limit the bridge stops switching: it stops producing, and it stops
+drawing, control electronics included. The taper is the protection's own hysteresis band, a
+published number rather than a smoothing constant.
+
+### 7.2 Input capacitance and bleed
+
+The DC input carries `inputCapacitanceFarads` of bulk capacitance and
+`inputBleedResistanceOhms` of discharge resistance, both stamped in every mode. Together they
+are what the input voltage means when the supply opens: the bank holds the charge it had, the
+input drains it, and the under-voltage protection sees the collapse. A 100 Ah pack whose BMS
+opens on over-current takes the 4.7 mF bank of the 12 V unit from 11.4 V to its 9.3 V cutoff in
+under a millisecond, and the load dies with it.
+
+### 7.3 Protection
+
+- The continuous rating is enforced by an inverse-time accumulator on the datasheet overload
+  curve, integrated with the same log-log machinery as breakers (section 9). A 1,500 W dryer on
+  the 1,000 W unit settles at 1,444 W once the pack has sagged, which the curve puts at 89 s;
+  that is when it trips, and reading the curve at the first instant's 1,453 W (83 s) is wrong by
+  7 %, because the curve is steep enough there that 0.6 % of load is 6 % of time.
+- A trip is latched for `restartDelaySeconds`. The accumulator cools as soon as the output is
+  dead, so without the latch the inverter restarts on the next step into the same overload,
+  forever, at the event bisection's resolution. With it, the behaviour is the hiccup real
+  hardware has: trip, wait out the lockout, restart, and trip again sooner because the
+  accumulator only cooled for the length of the lockout.
+- Under and over DC voltage trip at the catalog thresholds and restart only after the restart
+  threshold is recrossed and the lockout has expired. An undersized DC cable trips this before
+  the inverter delivers anything: 3 m of 14 AWG plus a pack's internal resistance is 48 mΩ, and
+  a source behind 48 mΩ at 13.3 V can deliver at most `V²/4R` = 914 W into anything at all,
+  which is below what a 1,500 W load asks for. There is no operating point at any bus voltage.
+- Heatsink temperature above `derateStartC` scales `P_rated` linearly to zero at `derateEndC`;
+  above `shutdownC` the inverter turns off. At 60 °C the 1,000 W unit is a 500 W inverter.
+- Reverse DC polarity puts the H-bridge body diodes across the input: a diode branch conducting
+  for `V_dc < 0` with the catalog's series resistance, solved for its own current so that its
+  dissipation is the branch's and not the internal node's (which KCL forces to zero). The energy
+  through it accumulates against `reversePolarityDamageJoules`.
+
+  What clears that fault is not the fuse. Reversing a 100 Ah LiFePO4 pack through a 200 A ANL
+  fuse draws 496 A, which is 2.5× the fuse's rating and tens of times the pack's, so the BMS
+  opens in 50 ms with 148 J in the diodes and the fuse at 0.4 % of its curve. The BMS then
+  reconnects on its own timer into the same mistake, and it is the third retry that takes the
+  cumulative energy past 400 J and destroys the bridge. The fuse never operates.
 
 ## 8. Loads
 

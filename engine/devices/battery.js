@@ -261,6 +261,7 @@ export function createBatteryDevice({ base, catalog }) {
         currentAmps: amps,
         terminalVoltage: ctx.across("positive", "negative"),
         openCircuitVoltage: this.openCircuitVoltage(),
+        internalResistanceOhms: this.resistanceOhms(ctx.temperature("cell")),
         stateOfCharge: this.state.stateOfCharge,
         energyWh: this.state.stateOfCharge * this.usableCapacityAh(cellC) * electrical.nominalVoltage,
         capacityAh: this.usableCapacityAh(cellC),

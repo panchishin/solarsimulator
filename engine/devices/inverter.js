@@ -6,7 +6,14 @@
 // couplings are in the Jacobian, so a battery that cannot hold up the bus limits AC output
 // inside the same Newton solve. See engine/PHYSICS.md section 7.
 
-import { clamp, interpolate, limitedExponential, thermalVoltage } from "../core/units.js";
+import {
+  clamp,
+  interpolate,
+  limitedExponential,
+  ramp,
+  softMin,
+  thermalVoltage
+} from "../core/units.js";
 import { advanceDamage, tripSeconds } from "../failure/tripCurves.js";
 import { FailureState, isOpen, transition } from "../failure/machines.js";
 
@@ -57,46 +64,115 @@ export function createInverterDevice({ base, catalog }) {
       return clamp(shifted, 0.3, 0.999);
     },
 
+    /**
+     * The largest output the bridge can synthesise from the bus it is on, V, and its slope.
+     *
+     * A bridge and transformer are wound to hold the output set point at the lowest input voltage
+     * the inverter is rated for, which is its under-voltage cutoff: that ratio is the hardware.
+     * Above the cutoff there is headroom and the regulator holds the set point; below it the
+     * output droops with the bus, which is what makes the input stop behaving as a constant-power
+     * sink on a collapsing bus. Holding 120 V into a 5 V bus is the thing no inverter can do, and
+     * assuming it can leaves the DC side with no solution at all.
+     */
+    outputCeiling(dcVolts) {
+      const perDcVolt = electrical.outputVoltage / limits.underVoltageTrip;
+      return { volts: Math.max(dcVolts, 0) * perDcVolt, perDcVolt: dcVolts > 0 ? perDcVolt : 0 };
+    },
+
     /** AC output current out of `ac-line`, and the internal converted power, at this point. */
     operatingPoint(ctx) {
       const acVolts = ctx.across(AC_LINE, AC_NEUTRAL);
       const resistance = electrical.outputResistanceOhms;
-      if (this.mode === "off" || isOpen(this)) {
-        return { acVolts, outAmps: 0, convertedWatts: 0, slopeOutPerAcVolt: 0 };
-      }
+      const idle = {
+        acVolts,
+        setVolts: 0,
+        outAmps: 0,
+        convertedWatts: 0,
+        window: 0,
+        slopeOutPerAcVolt: 0,
+        slopeSetPerDcVolt: 0,
+        slopeWindowPerDcVolt: 0
+      };
+      if (this.mode === "off" || isOpen(this)) return idle;
       if (this.mode === "currentLimited") {
         const outAmps = outputCurrentLimitAmps;
         return {
-          acVolts,
+          ...idle,
+          setVolts: acVolts + outAmps * resistance,
           outAmps,
           convertedWatts: (acVolts + outAmps * resistance) * outAmps,
-          slopeOutPerAcVolt: 0
+          window: 1
         };
       }
-      const setVolts = electrical.outputVoltage;
+      const dcVolts = ctx.across(DC_POSITIVE, DC_NEGATIVE);
+      const ceiling = this.outputCeiling(dcVolts);
+      const held = softMin(
+        electrical.outputVoltage,
+        ceiling.volts,
+        electrical.outputRegulationBandVolts
+      );
+      const window = this.inputWindow(dcVolts);
+      const setVolts = held.value * window.value;
       const outAmps = (setVolts - acVolts) / resistance;
       return {
         acVolts,
+        setVolts,
         outAmps,
         convertedWatts: setVolts * outAmps,
-        slopeOutPerAcVolt: -1 / resistance
+        window: window.value,
+        slopeOutPerAcVolt: -1 / resistance,
+        slopeSetPerDcVolt:
+          held.slopeB * ceiling.perDcVolt * window.value + held.value * window.perDcVolt,
+        slopeWindowPerDcVolt: window.perDcVolt
       };
+    },
+
+    /**
+     * How much of its input window the bus is inside, 0 to 1, and the slope.
+     *
+     * Above the input over-voltage limit the bridge stops switching: it stops producing and it
+     * stops drawing, control electronics included. Modelling it as still drawing its no-load
+     * power there would leave a constant-power sink on a bus nothing is holding up, and a
+     * constant-power sink has no operating point on a bus nothing is holding up, so Newton walks
+     * off to kilovolts looking for one. The taper is the protection's own hysteresis band, which
+     * is a number the datasheet publishes rather than a smoothing constant.
+     */
+    inputWindow(dcVolts) {
+      const width = Math.max(limits.overVoltageTrip - limits.overVoltageRestart, 1e-6);
+      const { value, slope } = ramp((limits.overVoltageTrip - dcVolts) / width);
+      return { value, perDcVolt: -slope / width };
     },
 
     seed() {
       return { [AC_LINE]: this.mode === "off" ? 0 : electrical.outputVoltage };
     },
 
+    /**
+     * The H-bridge body diodes as seen from the DC terminals: current out of `dc-negative` into
+     * the internal node, and the derivative. Silicon, so it is present in every mode.
+     */
+    diodeBranch(ctx) {
+      const volts = ctx.across(DC_NEGATIVE, DIODE_NODE);
+      const thermal = diode.idealityFactor * thermalVoltage(ctx.temperature(nodeName));
+      const { value, slope } = limitedExponential(volts / thermal);
+      return {
+        amps: diode.saturationCurrentAmps * (value - 1),
+        conductance: (diode.saturationCurrentAmps * slope) / thermal
+      };
+    },
+
     stamp(ctx) {
       const leakage = ctx.settings.gminSiemens;
       const dcVolts = ctx.across(DC_POSITIVE, DC_NEGATIVE);
 
+      // The input capacitor bank and the resistor that discharges it. Both are present in every
+      // mode, and together they are what gives the input a voltage in the instant after its
+      // supply opens: the bank holds the charge it had, and the constant-power input drains it.
+      ctx.capacitance(DC_POSITIVE, DC_NEGATIVE, electrical.inputCapacitanceFarads);
+      ctx.conductance(DC_POSITIVE, DC_NEGATIVE, 1 / electrical.inputBleedResistanceOhms);
+
       // Body diodes: present in every state, because they are silicon, not firmware.
-      const diodeVolts = ctx.across(DC_NEGATIVE, DIODE_NODE);
-      const thermal = diode.idealityFactor * thermalVoltage(ctx.temperature(nodeName));
-      const exponential = limitedExponential(diodeVolts / thermal);
-      const diodeAmps = diode.saturationCurrentAmps * (exponential.value - 1);
-      const diodeSlope = (diode.saturationCurrentAmps * exponential.slope) / thermal;
+      const { amps: diodeAmps, conductance: diodeSlope } = this.diodeBranch(ctx);
       ctx.current(DC_NEGATIVE, DIODE_NODE, diodeAmps, [
         [DC_NEGATIVE, diodeSlope],
         [DIODE_NODE, -diodeSlope]
@@ -104,7 +180,6 @@ export function createInverterDevice({ base, catalog }) {
       ctx.conductance(DIODE_NODE, DC_POSITIVE, 1 / Math.max(diode.seriesResistanceOhms, 1e-9));
 
       if (this.mode === "off" || isOpen(this)) {
-        ctx.conductance(DC_POSITIVE, DC_NEGATIVE, leakage);
         ctx.conductance(AC_LINE, AC_NEUTRAL, leakage);
         return;
       }
@@ -116,17 +191,26 @@ export function createInverterDevice({ base, catalog }) {
         ctx.current(AC_LINE, AC_NEUTRAL, -point.outAmps, []);
         ctx.conductance(AC_LINE, AC_NEUTRAL, leakage);
       } else {
-        ctx.thevenin(AC_LINE, AC_NEUTRAL, electrical.outputVoltage, electrical.outputResistanceOhms);
+        // A Thevenin source whose voltage depends on the DC bus, so it is stamped as its
+        // conductance plus a current source that the DC nodes appear in.
+        const outputConductance = 1 / electrical.outputResistanceOhms;
+        ctx.conductance(AC_LINE, AC_NEUTRAL, outputConductance);
+        const sourceAmps = point.setVolts * outputConductance;
+        const perDcVolt = point.slopeSetPerDcVolt * outputConductance;
+        ctx.current(AC_NEUTRAL, AC_LINE, sourceAmps, [
+          [DC_POSITIVE, perDcVolt],
+          [DC_NEGATIVE, -perDcVolt]
+        ]);
       }
 
-      // DC draw. A switching input is a constant-power sink only while the bus holds up; it
-      // cannot pull power out of a collapsed or reversed bus, so below a knee voltage the input
-      // is resistive. That is what the hardware does, and it also keeps Newton from chasing a
-      // division by a vanishing voltage on its way to the answer.
+      // DC draw. A switching input is a constant-power sink only inside its input window: it
+      // cannot pull power out of a collapsed or reversed bus, so below a knee voltage the input is
+      // resistive, and above its over-voltage limit it stops switching. That is what the hardware
+      // does, and it also keeps Newton from chasing a division by a vanishing voltage or a sink
+      // with no operating point on its way to the answer.
       const knee = Math.max(limits.underVoltageTrip * 0.5, 1);
       const efficiency = this.efficiency(Math.max(point.convertedWatts, 0), heatsinkC);
-      const inputWatts =
-        electrical.idleDrawWatts + Math.max(point.convertedWatts, 0) / efficiency;
+      const inputWatts = this.inputWatts(point, efficiency);
 
       if (dcVolts <= knee) {
         const g = inputWatts / (knee * knee);
@@ -139,10 +223,19 @@ export function createInverterDevice({ base, catalog }) {
       }
 
       const drawAmps = inputWatts / dcVolts;
-      const slopePerDcVolt = -drawAmps / dcVolts;
+      // The draw depends on the bus three times over: directly, through the output set point once
+      // the bus can no longer hold it, and through the window it shuts down in.
+      const convertedPerDcVolt =
+        point.convertedWatts > 0
+          ? (point.slopeSetPerDcVolt * (2 * point.setVolts - point.acVolts)) /
+            electrical.outputResistanceOhms
+          : 0;
+      const wattsPerDcVolt =
+        electrical.idleDrawWatts * point.slopeWindowPerDcVolt + convertedPerDcVolt / efficiency;
+      const slopePerDcVolt = -drawAmps / dcVolts + wattsPerDcVolt / dcVolts;
       const slopePerAcVolt =
         point.convertedWatts > 0
-          ? (electrical.outputVoltage * point.slopeOutPerAcVolt) / (efficiency * dcVolts)
+          ? (point.setVolts * point.slopeOutPerAcVolt) / (efficiency * dcVolts)
           : 0;
       ctx.current(DC_POSITIVE, DC_NEGATIVE, drawAmps, [
         [DC_POSITIVE, slopePerDcVolt],
@@ -196,17 +289,40 @@ export function createInverterDevice({ base, catalog }) {
       return restorable && now >= this.state.restartAtSeconds ? "on" : "off";
     },
 
+    /**
+     * Power into the input capacitor bank, W. The solver's companion model is what the port
+     * currents report, so the energy balance has to be stated the same way.
+     */
+    storedPowerWatts(ctx) {
+      if (!(ctx.dt > 0)) return 0;
+      const volts = ctx.across(DC_POSITIVE, DC_NEGATIVE);
+      const change = volts - ctx.acrossPrevious(DC_POSITIVE, DC_NEGATIVE);
+      return ((electrical.inputCapacitanceFarads * change) / ctx.dt) * volts;
+    },
+
     /** Losses, W: idle, conversion, output impedance and body-diode conduction. */
     lossWatts(ctx) {
-      const diodeAmps = this.portCurrents.get(DIODE_NODE) ?? 0;
-      const diodeLoss = Math.abs(ctx.across(DC_NEGATIVE, DC_POSITIVE) * diodeAmps);
-      if (this.mode === "off" || isOpen(this)) return diodeLoss;
+      // The branch current, not the internal node's net current: the diode and its series
+      // resistance meet there, so KCL makes the net zero and the branch's dissipation vanish.
+      const diodeLoss = Math.abs(
+        ctx.across(DC_NEGATIVE, DC_POSITIVE) * this.diodeBranch(ctx).amps
+      );
+      const bleedLoss =
+        ctx.across(DC_POSITIVE, DC_NEGATIVE) ** 2 / electrical.inputBleedResistanceOhms;
+      if (this.mode === "off" || isOpen(this)) return diodeLoss + bleedLoss;
       const heatsinkC = ctx.temperature(nodeName);
       const point = this.operatingPoint(ctx);
       const converted = Math.max(point.convertedWatts, 0);
       const efficiency = this.efficiency(converted, heatsinkC);
       const terminalWatts = point.acVolts * point.outAmps;
-      return electrical.idleDrawWatts + converted / efficiency - terminalWatts + diodeLoss;
+      return this.inputWatts(point, efficiency) - terminalWatts + diodeLoss + bleedLoss;
+    },
+
+    /** DC input power at this operating point, W: the no-load draw plus what it is converting. */
+    inputWatts(point, efficiency) {
+      return (
+        electrical.idleDrawWatts * point.window + Math.max(point.convertedWatts, 0) / efficiency
+      );
     },
 
     heat(ctx) {
@@ -230,8 +346,9 @@ export function createInverterDevice({ base, catalog }) {
         dt
       });
 
-      const diodeAmps = this.portCurrents.get(DIODE_NODE) ?? 0;
-      const reverseWatts = Math.abs(ctx.across(DC_NEGATIVE, DC_POSITIVE) * diodeAmps);
+      const reverseWatts = Math.abs(
+        ctx.across(DC_NEGATIVE, DC_POSITIVE) * this.diodeBranch(ctx).amps
+      );
       if (ctx.across(DC_POSITIVE, DC_NEGATIVE) < 0) {
         this.state.reverseEnergyJoules += reverseWatts * dt;
       }
@@ -249,10 +366,14 @@ export function createInverterDevice({ base, catalog }) {
       return events;
     },
 
-    onEvent(id) {
+    onEvent(id, ctx) {
       if (id === "overload-trip") {
         this.state.tripReason = "overload";
         this.mode = "off";
+        // The shutdown is latched for the restart delay. Without it the accumulator, which cools
+        // as soon as the output is dead, drops below 1 on the next step and the inverter restarts
+        // into the same overload, over and over, at the event bisection's resolution.
+        this.state.restartAtSeconds = ctx.timeSeconds + limits.restartDelaySeconds;
       }
       if (id === "reverse-polarity-damage") {
         // The body diodes short: the inverter becomes a low-resistance path across the battery,
