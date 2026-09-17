@@ -12,6 +12,12 @@ export class Integrator {
     this.dt = settings.initialStepSeconds;
     this.rejections = 0;
     this.eventsApplied = [];
+    // A device with an internal control loop cannot be advanced past its own dwell time without
+    // slowing that loop down, so the coarsest step the world allows is the tightest device limit.
+    this.deviceStepLimit = world.devices.reduce((limit, device) => {
+      const declared = device.maxStepSeconds();
+      return declared === null ? limit : Math.min(limit, declared);
+    }, settings.maxStepSeconds);
   }
 
   /**
@@ -25,7 +31,7 @@ export class Integrator {
 
     while (advanced < horizonSeconds - 1e-12) {
       const remaining = horizonSeconds - advanced;
-      let dt = Math.min(this.dt, remaining, settings.maxStepSeconds);
+      let dt = Math.min(this.dt, remaining, this.deviceStepLimit);
       dt = Math.max(dt, settings.minStepSeconds);
 
       const snapshot = this.world.snapshot();
@@ -85,6 +91,6 @@ export class Integrator {
       attempt.maxDamageChange / settings.maxDamageChangePerStep
     );
     const factor = load < 0.5 ? settings.stepGrow : load < 1 ? 1 : settings.stepShrink;
-    return Math.min(Math.max(dt * factor, settings.minStepSeconds), settings.maxStepSeconds);
+    return Math.min(Math.max(dt * factor, settings.minStepSeconds), this.deviceStepLimit);
   }
 }

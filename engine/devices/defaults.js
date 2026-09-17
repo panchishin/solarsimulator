@@ -22,6 +22,14 @@ export const DEVICE_DEFAULTS = {
   advance(ctx) {
     this.state.lastAdvanceSeconds = ctx.timeSeconds;
   },
+  /**
+   * Longest step this device can be advanced by, s, or null for no opinion. A device containing
+   * a discrete control loop has one: it acts once per call, so a step longer than its own dwell
+   * time silently slows the loop down.
+   */
+  maxStepSeconds() {
+    return null;
+  },
   events() {
     return [];
   },

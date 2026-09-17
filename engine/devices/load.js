@@ -23,6 +23,13 @@ export function createLoadDevice({ base, catalog }) {
   const behaviour = electrical.behaviour;
   const minVolts = electrical.minOperatingVoltage ?? 0;
   const knee = Math.max(minVolts * 0.5, electrical.ratedVoltage * 0.05);
+  // A constant-power input stage regulates only within its window. Above the voltage that damages
+  // it, it is no longer regulating anything, so the model stops pretending: it holds the
+  // conductance it had at that voltage and behaves resistively. That matters for more than
+  // realism. `I = P/V` has negative incremental conductance, so a constant-power load facing a
+  // high-impedance supply has a second, spurious equilibrium at a very high voltage, and Newton
+  // will happily walk to it. Turning the characteristic resistive removes it.
+  const regulationCeiling = limits.overVoltageDamage ?? null;
 
   const elementMaterial = electrical.elementMaterial
     ? catalog.material(electrical.elementMaterial)
@@ -85,24 +92,29 @@ export function createLoadDevice({ base, catalog }) {
         return;
       }
 
-      // Constant power, with a linear region below the knee so Newton never divides by a
-      // vanishing voltage on its way to the answer.
       const watts = demandWatts(ctx);
       if (watts <= 0) {
         ctx.conductance(LINE, NEUTRAL, ctx.settings.gminSiemens);
         return;
       }
-      const magnitude = Math.abs(volts);
-      if (magnitude <= knee) {
-        ctx.conductance(LINE, NEUTRAL, watts / (knee * knee));
-        return;
-      }
-      const sign = volts >= 0 ? 1 : -1;
-      const amps = (sign * watts) / magnitude;
-      ctx.current(LINE, NEUTRAL, amps, [
-        [LINE, -watts / (magnitude * magnitude)],
-        [NEUTRAL, watts / (magnitude * magnitude)]
-      ]);
+
+      // A regulated load draws P/V: pull the bus down and it draws more, which is negative
+      // incremental conductance. It is stamped instead as the resistance that draws that power at
+      // the present voltage, recomputed every iteration. Both give I = P/V at the answer, but the
+      // negative slope is only safe while something stiff is holding the bus. Let the supply stop
+      // conducting -- a cold pack blocking charge, a controller tapered off at its stage voltage --
+      // and the load's own node goes negative, at which point a Newton step climbs away from the
+      // solution instead of down to it and the bus runs off to nowhere. The secant conductance is
+      // positive everywhere, so the iteration always walks down to where the supply picks up again.
+      //
+      // Two clamps bound the characteristic. Below the knee the regulator cannot hold its output and
+      // the input turns resistive, and above the voltage that destroys the input stage it is not
+      // regulating anything either.
+      const magnitude = Math.min(
+        Math.max(Math.abs(volts), knee),
+        regulationCeiling ?? Number.POSITIVE_INFINITY
+      );
+      ctx.conductance(LINE, NEUTRAL, watts / (magnitude * magnitude));
     },
 
     limits(ctx) {

@@ -58,13 +58,13 @@ export function createBatteryDevice({ base, catalog }) {
       );
     },
 
+    /** Cells plus the BMS switch path, ohms: what a terminal-to-terminal measurement sees. */
     resistanceOhms(temperatureC) {
-      const contactor = electrical.contactorResistanceOhms ?? 0;
       return (
         electrical.internalResistanceOhms *
           temperatureFactor(electrical.resistanceTemperatureFactors, temperatureC) *
           stateOfChargeFactor(electrical.resistanceStateOfChargeFactors, this.state.stateOfCharge) +
-        contactor
+        (electrical.contactorResistanceOhms ?? 0)
       );
     },
 
@@ -80,7 +80,33 @@ export function createBatteryDevice({ base, catalog }) {
       const resistance = isShorted(this)
         ? Math.max(this.resistanceOhms(ctx.temperature("cell")) * 0.05, 1e-4)
         : this.resistanceOhms(ctx.temperature("cell"));
-      ctx.thevenin("positive", "negative", this.openCircuitVoltage(), resistance);
+      const openCircuit = this.openCircuitVoltage();
+      if (this.mode !== "chargeBlocked") {
+        ctx.thevenin("positive", "negative", openCircuit, resistance);
+        return;
+      }
+
+      // The BMS has opened the charge MOSFET and left the discharge one closed, so the branch is
+      // one-way. Current still leaves through the discharge path, which is why a frozen or a full
+      // pack goes on running the loads; what tries to enter meets only the BMS's own sense and
+      // balancing network.
+      //
+      // Stamped as a resistance that depends on the direction, rather than as a diode or as a pair
+      // of solver modes. A diode is truer to the silicon but spans twenty decades of conductance
+      // over half a volt, which no residual-based line search survives. A mode that opens the
+      // branch cannot supply the load at all, so the guess it makes when a compressor starts leaves
+      // the network with no solution to find. This characteristic is continuous at the crossing and
+      // monotonic on both sides of it, which is all Newton needs: the kink in its slope is the
+      // MOSFET turning off.
+      const terminalVolts = ctx.across("positive", "negative");
+      const conductance =
+        terminalVolts >= openCircuit
+          ? 1 / electrical.chargeBlockedResistanceOhms
+          : 1 / resistance;
+      ctx.current("positive", "negative", (terminalVolts - openCircuit) * conductance, [
+        ["positive", conductance],
+        ["negative", -conductance]
+      ]);
     },
 
     /**
@@ -91,21 +117,38 @@ export function createBatteryDevice({ base, catalog }) {
     protectionCondition(ctx) {
       const cellC = ctx.temperature("cell");
       const terminalVolts = ctx.across("positive", "negative");
-      const amps = this.portCurrents.get("positive") ?? 0;
       if (terminalVolts >= limits.overVoltageDisconnect) return "pack over-voltage";
       if (terminalVolts <= limits.underVoltageDisconnect) return "pack under-voltage";
       if (cellC >= limits.highTemperatureDisconnectC) return "cell over-temperature";
-      if (amps > 0 && cellC <= limits.chargeLowTemperatureDisconnectC) {
-        return "charging below the low-temperature limit";
-      }
       return null;
+    },
+
+    /**
+     * True while the BMS is refusing charge but still supplying the loads. It happens for two
+     * reasons, both of which open the charge MOSFET and leave the discharge one closed.
+     *
+     * Below freezing, lithium plates onto the anode instead of intercalating, so charging is locked
+     * out rather than derated. At the top of charge the cells reach their over-voltage limit, and
+     * the pack stops accepting current: without that the coulombs pushed at a full pack would go
+     * nowhere, since state of charge cannot exceed one. Each has its own hysteresis, and both are
+     * kept apart from the protection conditions because they block one direction only.
+     */
+    chargeLocked(ctx) {
+      const blocked = this.mode === "chargeBlocked";
+      const cellC = ctx.temperature("cell");
+      const coldThreshold = blocked
+        ? limits.chargeLowTemperatureReconnectC
+        : limits.chargeLowTemperatureDisconnectC;
+      if (cellC <= coldThreshold) return true;
+      return this.state.stateOfCharge >= (blocked ? limits.chargeResumeStateOfCharge : 1);
     },
 
     limits(ctx) {
       if (isOpen(this)) return "open";
       const cellC = ctx.temperature("cell");
       const now = ctx.timeSeconds;
-      if (this.mode === "closed") return "closed";
+
+      if (this.mode !== "open") return this.chargeLocked(ctx) ? "chargeBlocked" : "closed";
 
       const openCircuit = this.openCircuitVoltage();
       const recovered =
@@ -113,7 +156,8 @@ export function createBatteryDevice({ base, catalog }) {
         openCircuit > limits.underVoltageReconnect &&
         cellC < limits.highTemperatureReconnectC &&
         this.state.overCurrentDamage < 1;
-      return recovered && now >= this.state.reconnectAtSeconds ? "closed" : "open";
+      if (!(recovered && now >= this.state.reconnectAtSeconds)) return "open";
+      return this.chargeLocked(ctx) ? "chargeBlocked" : "closed";
     },
 
     runawayWatts(ctx) {
@@ -170,7 +214,8 @@ export function createBatteryDevice({ base, catalog }) {
       });
       if (cellC >= cellMaterial.runawayOnsetTemperatureC) this.state.runaway = true;
 
-      const condition = this.mode === "closed" ? this.protectionCondition(ctx) : null;
+      const conducting = this.mode === "closed" || this.mode === "chargeBlocked";
+      const condition = conducting ? this.protectionCondition(ctx) : null;
       if (condition) {
         this.state.protectionCondition = condition;
         this.state.protectionElapsedSeconds += dt;
@@ -190,7 +235,7 @@ export function createBatteryDevice({ base, catalog }) {
           value: ctx.temperature("cell") - cellMaterial.runawayOnsetTemperatureC
         }
       ];
-      if (this.mode === "closed") {
+      if (this.mode === "closed" || this.mode === "chargeBlocked") {
         const holding = this.protectionCondition(ctx) !== null;
         events.push({
           id: "bms-disconnect",
@@ -227,8 +272,14 @@ export function createBatteryDevice({ base, catalog }) {
         heatWatts: this.heat(ctx).cell,
         cellTemperatureC: cellC,
         caseTemperatureC: ctx.temperature("case"),
-        contactorClosed: this.mode === "closed" && !isOpen(this),
+        contactorClosed: this.mode !== "open" && !isOpen(this),
+        chargeAccepted: this.mode === "closed" && !isOpen(this),
         protectionCondition: this.state.protectionCondition,
+        chargeLockedByCold:
+          this.mode === "chargeBlocked" && cellC <= limits.chargeLowTemperatureReconnectC,
+        chargeLockedByFull:
+          this.mode === "chargeBlocked" &&
+          this.state.stateOfCharge >= limits.chargeResumeStateOfCharge,
         runaway: this.state.runaway,
         failure: this.failure
       };

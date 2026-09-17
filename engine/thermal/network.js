@@ -25,7 +25,16 @@ export class ThermalNetwork {
     this.dynamicLinks = [];
   }
 
-  addNode({ key, deviceId, name, material, massKg, surface = null, runaway = false }) {
+  addNode({
+    key,
+    deviceId,
+    name,
+    material,
+    massKg,
+    surface = null,
+    runaway = false,
+    ambientOverrideC = null
+  }) {
     if (this.indexByKey.has(key)) throw new RangeError(`Duplicate thermal node "${key}"`);
     const node = {
       key,
@@ -35,9 +44,13 @@ export class ThermalNetwork {
       massKg,
       surface,
       runaway,
+      // Set for equipment that is not in outdoor air: a pack in a conditioned garage sees room
+      // temperature while the array on the roof sees the weather, and for a lithium pack in
+      // winter that difference decides whether it can charge at all.
+      ambientOverrideC,
       capacityJPerK: heatCapacityJPerK(material, massKg),
       index: this.nodes.length,
-      temperatureC: this.ambientC,
+      temperatureC: ambientOverrideC ?? this.ambientC,
       heatWatts: 0,
       surfaceLossWatts: 0,
       fanRunning: true
@@ -112,16 +125,17 @@ export class ThermalNetwork {
       system?.add(index, index, node.capacityJPerK * invDt);
 
       if (!node.surface) continue;
+      const nodeAmbient = node.ambientOverrideC ?? this.ambientC;
       const { conductanceWPerK, radiationSlope, radiationWatts = 0 } = surfaceConductance({
         surface: node.surface,
         material: node.material,
         air: this.air,
         surfaceC: trial[index],
-        ambientC: this.ambientC,
+        ambientC: nodeAmbient,
         windSpeedMPerS: this.windSpeedMPerS,
         fanRunning: node.fanRunning
       });
-      const convective = conductanceWPerK * (trial[index] - this.ambientC);
+      const convective = conductanceWPerK * (trial[index] - nodeAmbient);
       residual[index] += convective + radiationWatts;
       surfaceLoss[index] += convective + radiationWatts;
       system?.add(index, index, conductanceWPerK + radiationSlope);
@@ -165,7 +179,7 @@ export class ThermalNetwork {
           areaM2: link.areaM2,
           viewFactor: link.viewFactor,
           surfaceC: trial[from],
-          backgroundC: this.ambientC
+          backgroundC: link.a.ambientOverrideC ?? this.ambientC
         });
         residual[from] += link.transmittance * escaping.watts;
         surfaceLoss[from] += link.transmittance * escaping.watts;

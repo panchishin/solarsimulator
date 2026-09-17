@@ -37,8 +37,12 @@ const smoothstep = (t) => t * t * t * (t * (t * 6 - 15) + 10);
 
 /**
  * Weather for one site. Cloud cover is value noise around `cloudMeanClearness` with
- * half-amplitude `cloudAmplitude` and a correlation time of `cloudPeriodHours`. Ambient
- * temperature is a two-arc cosine between the daily minimum and maximum.
+ * half-amplitude `cloudAmplitude` and a correlation time of `cloudPeriodHours`.
+ *
+ * Ambient temperature is an annual sinusoid carrying a daily two-arc cosine. Both cycles matter
+ * to a solar array: the annual one because a December cell runs far cooler than a June one at the
+ * same irradiance, and the daily one because the hottest part of the afternoon is not the
+ * brightest part of the day.
  */
 export function createWeather({
   seed = 1,
@@ -46,8 +50,10 @@ export function createWeather({
   cloudMeanClearness = 0.8,
   cloudAmplitude = 0.2,
   windSpeedMPerS = 1,
-  dailyTemperatureMinC = 10,
-  dailyTemperatureMaxC = 25,
+  annualMeanTemperatureC = 11.6,
+  annualTemperatureAmplitudeC = 12,
+  coldestDayOfYear = 10,
+  dailyTemperatureSwingC = 15,
   temperatureMinHour = 5,
   temperatureMaxHour = 15
 } = {}) {
@@ -65,12 +71,18 @@ export function createWeather({
     );
   };
 
-  const ambientTemperatureC = (localHourOfDay) => {
+  /** Daily mean temperature on `dayOfYear`, from the annual cycle alone. */
+  const dailyMeanTemperatureC = (dayOfYear) =>
+    annualMeanTemperatureC -
+    annualTemperatureAmplitudeC *
+      Math.cos((2 * Math.PI * (dayOfYear - coldestDayOfYear)) / 365.25);
+
+  const ambientTemperatureC = (localHourOfDay, dayOfYear = 182) => {
     const hour = ((localHourOfDay % 24) + 24) % 24;
     const minHour = ((temperatureMinHour % 24) + 24) % 24;
     const maxHour = ((temperatureMaxHour % 24) + 24) % 24;
-    const mean = (dailyTemperatureMaxC + dailyTemperatureMinC) / 2;
-    const halfSwing = (dailyTemperatureMaxC - dailyTemperatureMinC) / 2;
+    const mean = dailyMeanTemperatureC(dayOfYear);
+    const halfSwing = dailyTemperatureSwingC / 2;
 
     // Forward distance around the clock, so both arcs work whichever extreme comes first and
     // whichever of them wraps past midnight.
@@ -88,7 +100,7 @@ export function createWeather({
     return mean - halfSwing * Math.cos(Math.PI * fraction);
   };
 
-  return { clearnessAt, ambientTemperatureC, windSpeedMPerS };
+  return { clearnessAt, ambientTemperatureC, dailyMeanTemperatureC, windSpeedMPerS };
 }
 
 export { MIN_CLEARNESS, MAX_CLEARNESS };

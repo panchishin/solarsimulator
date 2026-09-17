@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { Catalog } from "../../engine/core/catalog.js";
 import { GRID_SIZE_PX } from "../../engine/core/geometry.js";
 import { World, createStaticEnvironment } from "../../engine/world.js";
+import { createEnvironment } from "../../engine/environment/site.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const repoRoot = join(here, "..", "..");
@@ -30,13 +31,18 @@ export function layoutBuilder() {
   let counter = 0;
 
   const api = {
-    place(id, componentId, gridX = 0, gridY = 0, rotation = 0) {
+    /**
+     * `extra` becomes part of the layout component, which is what a device sees as
+     * `this.instance`: per-panel `tiltDeg`/`surfaceAzimuthDeg`, `state.shading`, and so on.
+     */
+    place(id, componentId, gridX = 0, gridY = 0, extra = {}) {
       components.push({
         id,
         componentId,
         x: gridX * GRID_SIZE_PX,
         y: gridY * GRID_SIZE_PX,
-        rotation
+        rotation: 0,
+        ...extra
       });
       return api;
     },
@@ -68,6 +74,20 @@ export function layoutBuilder() {
 
 export const staticEnvironment = (ambientTemperatureC = 20, windSpeedMPerS = 0, planeOfArrayWPerM2 = 0) =>
   createStaticEnvironment({ ambientTemperatureC, windSpeedMPerS, planeOfArrayWPerM2 });
+
+/**
+ * The catalog's site (Denver) on a given local date, starting at local midnight so that a
+ * 24 hour run is one calendar day.
+ */
+export function siteEnvironment(localDate = "2024-06-21", site = {}) {
+  const timeZoneHours = { ...catalog.simulation.site, ...site }.timeZoneHours;
+  const offset = `${timeZoneHours <= 0 ? "-" : "+"}${String(Math.abs(timeZoneHours)).padStart(2, "0")}:00`;
+  return createEnvironment({
+    catalog,
+    startDate: new Date(`${localDate}T00:00:00${offset}`),
+    site
+  });
+}
 
 /** Assert `actual` is within `tolerance` (relative) of `expected`. */
 export function closeTo(actual, expected, tolerance, message = "") {

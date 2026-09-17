@@ -199,10 +199,18 @@ export class Solver {
   /** Damped Newton at fixed device modes. */
   newton() {
     const context = this.context;
-    const { maxNewtonIterations, lineSearchSteps, voltageAbsToleranceVolts, voltageRelTolerance, currentAbsToleranceAmps } =
-      this.settings;
+    const {
+      maxNewtonIterations,
+      lineSearchSteps,
+      voltageAbsToleranceVolts,
+      voltageRelTolerance,
+      currentAbsToleranceAmps: currentTolerance,
+      stagnantIterationLimit,
+      maxVoltageStepVolts
+    } = this.settings;
 
     let residualNorm = Number.POSITIVE_INFINITY;
+    let stagnantIterations = 0;
     for (let iteration = 1; iteration <= maxNewtonIterations; iteration += 1) {
       residualNorm = this.build({ jacobian: true });
       const solution = context.system.solve();
@@ -212,28 +220,94 @@ export class Solver {
         step[index] = solution[index] - context.voltages[index];
       }
 
+      // Trust region. An early step computed from a linearisation that is wrong by orders of
+      // magnitude can otherwise throw a node hundreds of volts past every junction in the
+      // circuit, and the exponentials there swamp the matrix.
+      // Scaling the whole vector rather than clamping each component keeps the Newton direction,
+      // which the line search below relies on.
+      const rawStepNorm = infinityNorm(step);
+      if (rawStepNorm > maxVoltageStepVolts) {
+        const shrink = maxVoltageStepVolts / rawStepNorm;
+        for (let index = 0; index < context.nodeCount; index += 1) step[index] *= shrink;
+      }
+
       let alpha = 1;
       let accepted = null;
       let acceptedNorm = residualNorm;
+      let fullStep = null;
+      let fullStepNorm = 0;
       const trial = new Float64Array(context.nodeCount);
       for (let attempt = 0; attempt < lineSearchSteps; attempt += 1) {
         for (let index = 0; index < context.nodeCount; index += 1) {
           trial[index] = context.voltages[index] + alpha * step[index];
         }
         const trialNorm = this.residualNormAt(trial);
-        if (trialNorm < residualNorm || attempt === lineSearchSteps - 1) {
+        if (attempt === 0) {
+          fullStep = Float64Array.from(trial);
+          fullStepNorm = trialNorm;
+        }
+        // Damping exists to stop divergence. Once the trial residual is at the noise floor there
+        // is nothing left to diverge from, and halving the step would only make the iteration
+        // crawl towards a voltage tolerance it can never reach.
+        if (trialNorm < residualNorm || trialNorm <= currentTolerance) {
           accepted = Float64Array.from(trial);
           acceptedNorm = trialNorm;
           break;
         }
         alpha /= 2;
       }
+      if (accepted === null) {
+        // No damped step improved anything. One iteration before a nonlinear element snaps into
+        // place that is normal: the residual rises, then falls quadratically, and backtracking to a
+        // two-thousandth of the step is paralysis rather than safety. Take the full step when it is
+        // only modestly worse, and keep the most damped one when it is catastrophically worse,
+        // which is the case damping exists for.
+        const tolerable = fullStepNorm <= residualNorm * 10;
+        if (tolerable) {
+          accepted = fullStep;
+          acceptedNorm = fullStepNorm;
+          alpha = 1;
+        } else {
+          for (let index = 0; index < context.nodeCount; index += 1) {
+            trial[index] = context.voltages[index] + alpha * step[index];
+          }
+          accepted = Float64Array.from(trial);
+          acceptedNorm = this.residualNormAt(accepted);
+        }
+      }
 
       context.voltages = accepted;
-      const stepNorm = alpha * infinityNorm(step);
-      const scale = voltageAbsToleranceVolts + voltageRelTolerance * infinityNorm(context.voltages);
-      if (stepNorm <= scale && acceptedNorm <= Math.max(currentAbsToleranceAmps, 1e-9)) {
-        return { iterations: iteration, residualNorm: acceptedNorm };
+
+      // KCL is the physical statement of convergence: every node's current sums to within
+      // currentAbsToleranceAmps.
+      const kirchhoffSatisfied = acceptedNorm <= currentTolerance;
+
+      // The voltage test is per node, the way SPICE does it, because a node's own voltage sets
+      // its tolerance. Scaling every node's step by the largest voltage in the circuit makes the
+      // test impossible for a high-impedance node.
+      let settled = kirchhoffSatisfied;
+      if (settled) {
+        for (let index = 0; index < context.nodeCount; index += 1) {
+          const delta = Math.abs(alpha * step[index]);
+          const scale =
+            voltageAbsToleranceVolts + voltageRelTolerance * Math.abs(context.voltages[index]);
+          if (delta > scale) {
+            settled = false;
+            break;
+          }
+        }
+      }
+      if (settled) return { iterations: iteration, residualNorm: acceptedNorm };
+
+      // A dark solar array's internal junctions have conductances near 1e-9 S while the same
+      // matrix carries a 52 V battery through 0.015 ohm. Rounding in the stiff equation then
+      // shows up on the weak nodes as steps far larger than any voltage tolerance, and no number
+      // of iterations will shrink them. KCL holding for several iterations in a row while the
+      // voltages jitter is convergence to the precision this matrix has, so it is accepted and
+      // reported rather than thrown.
+      stagnantIterations = kirchhoffSatisfied ? stagnantIterations + 1 : 0;
+      if (stagnantIterations >= stagnantIterationLimit) {
+        return { iterations: iteration, residualNorm: acceptedNorm, stagnant: true };
       }
       residualNorm = acceptedNorm;
     }

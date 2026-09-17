@@ -67,12 +67,18 @@ export function createEnvironment({ catalog, startDate = new Date("2024-06-21T00
         24) %
       24;
     const extraterrestrialNormalWPerM2 = SOLAR_CONSTANT * position.eccentricityCorrection;
+    // Local day of year, so the annual temperature cycle lines up with the local calendar rather
+    // than with UTC.
+    const localDate = new Date(date.getTime() + site.timeZoneHours * 3600 * 1000);
+    const dayOfYear =
+      (localDate.getTime() - Date.UTC(localDate.getUTCFullYear(), 0, 1)) / 86400000 + 1;
 
     const entry = {
       date,
       timeSeconds,
       localHour,
-      ambientTemperatureC: weather.ambientTemperatureC(localHour),
+      dayOfYear,
+      ambientTemperatureC: weather.ambientTemperatureC(localHour, dayOfYear),
       windSpeedMPerS: weather.windSpeedMPerS,
       clearness,
       solarElevationDeg: position.elevationDeg,

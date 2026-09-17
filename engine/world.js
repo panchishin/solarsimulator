@@ -116,6 +116,11 @@ export class World {
 
   attachThermal(device) {
     const network = this.thermalNetwork;
+    // Equipment placed indoors sits in a conditioned space rather than in the weather. It is a
+    // property of the installation, not of the component, so it comes from the layout.
+    const ambientOverrideC = device.instance?.indoors
+      ? this.catalog.simulation.site.indoorTemperatureC
+      : null;
     for (const node of device.thermalNodes) {
       network.addNode({
         key: `${device.id}##${node.name}`,
@@ -124,7 +129,8 @@ export class World {
         material: node.material,
         massKg: node.massKg,
         surface: node.surface,
-        runaway: node.runaway
+        runaway: node.runaway,
+        ambientOverrideC
       });
     }
     for (const link of device.thermalLinks) {

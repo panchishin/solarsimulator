@@ -108,7 +108,9 @@ export function solarPosition({ date, latitudeDeg, longitudeDeg }) {
       1
     );
     const fromSouth = radToDeg(Math.acos(cosAzimuthFromSouth));
-    azimuthDeg = hourAngleDeg > 0 ? (540 - fromSouth) % 360 : (180 + fromSouth) % 360;
+    // The hour angle is negative before solar noon, when the sun is east of the meridian and its
+    // azimuth is therefore less than 180 degrees.
+    azimuthDeg = hourAngleDeg > 0 ? (180 + fromSouth) % 360 : (540 - fromSouth) % 360;
   }
 
   return {

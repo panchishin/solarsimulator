@@ -62,6 +62,57 @@ export function limitedExponential(x, limit = 60) {
   return { value: at * (1 + (x - limit)), slope: at };
 }
 
+/**
+ * A fraction that goes from 0 to 1 as `x` crosses from 0 to 1, plus its derivative. Exactly 0 and
+ * exactly 1 outside, so whatever it scales really does stop and really does reach full value.
+ *
+ * The ramp between them is linear rather than an S-curve on purpose. A Hermite smoothstep is
+ * prettier, being continuous in its slope, but its slope is zero at both ends of the transition,
+ * and a regulator whose gain vanishes at the edge of its own band gives Newton nothing to follow:
+ * the iteration crawls a few microvolts at a time and never arrives. Linear keeps the gain constant
+ * across the band, and the kinks at the ends are where the regulator saturates, which the solver
+ * handles the same way it handles a switch.
+ */
+export function ramp(x) {
+  if (x <= 0) return { value: 0, slope: 0 };
+  if (x >= 1) return { value: 1, slope: 0 };
+  return { value: x, slope: 1 };
+}
+
+/**
+ * `max(x, 0)` with the corner rounded over `width`, centred on the corner, plus its derivative.
+ * Exactly zero below `-width/2`, exactly `x` above `+width/2`, and a quadratic in between, so
+ * both the value and the slope are continuous. Centring matters: it keeps both tails exact, so a
+ * regulator built from this really does deliver nothing once it is out of its band.
+ *
+ * Any regulator modelled as "does nothing below its set point, then holds it exactly" is a step
+ * change in conductance, and Newton chatters across it forever once an operating point lands on
+ * the corner: a tracker at sunrise does exactly that. A real regulator has finite loop gain, so
+ * the corner has a width, which is its error band. Rounding it there is what lets the Jacobian
+ * see the transition at all.
+ */
+export function softCorner(x, width) {
+  const band = Math.max(width, 1e-12);
+  const half = band / 2;
+  if (x <= -half) return { value: 0, slope: 0 };
+  if (x >= half) return { value: x, slope: 1 };
+  const above = x + half;
+  return { value: (above * above) / (2 * band), slope: above / band };
+}
+
+/**
+ * `min(a, b)` with a rounded corner, and the derivative with respect to each argument.
+ *
+ * Hardware that obeys whichever of several control loops binds first is a minimum, and taking it
+ * with `Math.min` puts a kink in the characteristic that the Jacobian cannot see, so Newton
+ * oscillates between the two branches. Rounding the corner over the width of the loops' error
+ * bands makes the transition differentiable.
+ */
+export function softMin(a, b, width) {
+  const corner = softCorner(a - b, width);
+  return { value: a - corner.value, slopeA: 1 - corner.slope, slopeB: corner.slope };
+}
+
 /** Thermal voltage kT/q of a single junction at `temperatureC`. */
 export const thermalVoltage = (temperatureC) =>
   (BOLTZMANN * toKelvin(temperatureC)) / ELEMENTARY_CHARGE;

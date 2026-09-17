@@ -7,7 +7,7 @@
 //
 // See engine/PHYSICS.md section 6.
 
-import { clamp, interpolate } from "../core/units.js";
+import { clamp, interpolate, ramp, softCorner, softMin } from "../core/units.js";
 import { FailureState, isOpen, transition } from "../failure/machines.js";
 
 const PV_POSITIVE = "pv-positive";
@@ -37,6 +37,7 @@ export function createChargeControllerDevice({ base }) {
       stage: STAGE_BULK,
       absorbSeconds: 0,
       nominalMultiple: null,
+      bindingLoop: null,
       energyWh: 0,
       burnedMassKg: 0,
       lastAdvanceSeconds: 0
@@ -68,10 +69,26 @@ export function createChargeControllerDevice({ base }) {
       return {};
     },
 
+    /**
+     * Perturb and observe acts once per call, so a step longer than this would quietly turn the
+     * tracker into something slower than the hardware it stands for.
+     */
+    maxStepSeconds() {
+      return isMppt ? electrical.tracking.maxIntegrationStepSeconds : null;
+    },
+
     stamp(ctx) {
       const leakage = ctx.settings.gminSiemens;
       // The negative rails are bonded inside the controller: it is not an isolated converter.
       ctx.conductance(PV_NEGATIVE, BATTERY_NEGATIVE, 1 / Math.max(bondResistance, 1e-12));
+      // The voltage sense dividers are across both ports in every mode, including off: the
+      // controller has to measure array and pack voltage to do anything at all. They are also what
+      // keeps those nodes defined. Without the input divider, a dark array feeding a tracker that
+      // has not yet chosen a reference is a pure open circuit; without the output one, a pack that
+      // has stopped accepting charge leaves the output rail floating between two elements that
+      // both carry no current.
+      ctx.conductance(PV_POSITIVE, PV_NEGATIVE, 1 / electrical.inputBleedResistanceOhms);
+      ctx.conductance(BATTERY_POSITIVE, BATTERY_NEGATIVE, 1 / electrical.outputBleedResistanceOhms);
 
       if (this.mode === "off" || isOpen(this)) {
         ctx.conductance(PV_POSITIVE, PV_NEGATIVE, leakage);
@@ -93,64 +110,79 @@ export function createChargeControllerDevice({ base }) {
 
       const inputVolts = ctx.across(PV_POSITIVE, PV_NEGATIVE);
       const outputVolts = Math.max(ctx.across(BATTERY_POSITIVE, BATTERY_NEGATIVE), 1);
-      const reference = this.state.referenceVolts ?? inputVolts;
+      // Before the tracker has chosen a reference it is not loading the array: it is measuring the
+      // open-circuit voltage it will start from. An unset reference therefore has to mean "draw
+      // nothing" rather than "draw at zero error", which would sit exactly on the corner.
+      const reference = this.state.referenceVolts ?? Number.POSITIVE_INFINITY;
 
-      if (this.mode === "tracking") {
-        const above = inputVolts > reference;
-        const conductance = above ? 1 / electrical.controlResistanceOhms : leakage;
-        const inputAmps = conductance * (inputVolts - reference);
-        ctx.current(PV_POSITIVE, PV_NEGATIVE, inputAmps, [
-          [PV_POSITIVE, conductance],
-          [PV_NEGATIVE, -conductance]
-        ]);
+      // An MPPT runs three control loops at once: hold the array at the tracking reference, hold
+      // the output at the stage voltage, and hold the output current at the charge limit. The
+      // hardware obeys whichever one binds, so the model takes the minimum of the three rather
+      // than switching between modes. Rounding each corner over the loops' error band is what
+      // lets Newton see the transitions at all; with hard corners the iteration oscillates
+      // between two branches that each look right to the linearisation.
+      const band = electrical.inputRegulationBandVolts;
 
-        const inputWatts = inputVolts * inputAmps;
-        const efficiency = this.efficiency(inputWatts);
-        const delivered = Math.max(efficiency * inputWatts - electrical.idleDrawWatts, 0);
-        const outputAmps = -delivered / outputVolts;
-        const perInputVolt = -(efficiency * (inputAmps + inputVolts * conductance)) / outputVolts;
-        const perOutputVolt = delivered / (outputVolts * outputVolts);
-        ctx.current(BATTERY_POSITIVE, BATTERY_NEGATIVE, outputAmps, [
-          [PV_POSITIVE, perInputVolt],
-          [PV_NEGATIVE, -perInputVolt],
-          [BATTERY_POSITIVE, perOutputVolt],
-          [BATTERY_NEGATIVE, -perOutputVolt]
-        ]);
-        return;
-      }
-
-      // Regulating modes: the output is the constraint and the input power follows from it.
-      let deliveredAmps;
-      let perOutputVoltDelivered;
-      if (this.mode === "currentLimited") {
-        deliveredAmps = this.chargeCurrentLimitAmps(ctx.temperature(nodeName));
-        perOutputVoltDelivered = 0;
-        ctx.current(BATTERY_POSITIVE, BATTERY_NEGATIVE, -deliveredAmps, []);
-        ctx.conductance(BATTERY_POSITIVE, BATTERY_NEGATIVE, leakage);
-      } else {
-        const target = this.stageTargetVolts();
-        const regulation = electrical.outputRegulationResistanceOhms;
-        deliveredAmps = (target - outputVolts) / regulation;
-        perOutputVoltDelivered = -1 / regulation;
-        ctx.thevenin(BATTERY_POSITIVE, BATTERY_NEGATIVE, target, regulation);
-      }
-
-      const deliveredWatts = outputVolts * deliveredAmps;
-      const efficiency = this.efficiency(Math.max(deliveredWatts, 0));
-      const requiredWatts = Math.max(deliveredWatts, 0) / efficiency + electrical.idleDrawWatts;
-      const usableInputVolts = Math.max(inputVolts, 1);
-      const inputAmps = requiredWatts / usableInputVolts;
-      const perInputVolt = inputVolts > 1 ? -inputAmps / usableInputVolts : 0;
-      const perOutputVolt =
-        deliveredWatts > 0
-          ? (deliveredAmps + outputVolts * perOutputVoltDelivered) /
-            (efficiency * usableInputVolts)
-          : 0;
+      // Input loop: draw current in proportion to how far the array sits above the reference.
+      const corner = softCorner(inputVolts - reference, band);
+      const inputConductance = corner.slope / electrical.controlResistanceOhms;
+      const inputAmps = corner.value / electrical.controlResistanceOhms;
       ctx.current(PV_POSITIVE, PV_NEGATIVE, inputAmps, [
-        [PV_POSITIVE, perInputVolt],
-        [PV_NEGATIVE, -perInputVolt],
-        [BATTERY_POSITIVE, perOutputVolt],
-        [BATTERY_NEGATIVE, -perOutputVolt]
+        [PV_POSITIVE, inputConductance],
+        [PV_NEGATIVE, -inputConductance]
+      ]);
+
+      // What that input can put on the output, after conversion losses and self-consumption.
+      const efficiency = this.efficiency(inputVolts * inputAmps);
+      const availableWatts = Math.max(
+        efficiency * inputVolts * inputAmps - electrical.idleDrawWatts,
+        0
+      );
+      const availableAmps = availableWatts / outputVolts;
+      const availablePerInputVolt =
+        availableWatts > 0
+          ? (efficiency * (inputAmps + inputVolts * inputConductance)) / outputVolts
+          : 0;
+      // Delivering a fixed power means the current falls as the output voltage rises: a negative
+      // incremental conductance on the output node, which is what a converter really presents.
+      const availablePerOutputVolt = availableWatts > 0 ? -availableAmps / outputVolts : 0;
+
+      // Current loop: a flat ceiling on the output, derated by heatsink temperature. It competes
+      // with what the array can supply, and the hardware obeys whichever is lower. The handover
+      // band is a fraction of the current where the two meet, so the same rounding works at a
+      // milliamp after sunset and at the 50 A rating.
+      const limitAmps = this.chargeCurrentLimitAmps(ctx.temperature(nodeName));
+      const scale = Math.max(
+        Math.abs(availableAmps),
+        Math.abs(limitAmps),
+        electrical.loopCurrentFloorAmps
+      );
+      const capped = softMin(availableAmps, limitAmps, scale * electrical.loopCurrentBandFraction);
+      let deliveredAmps = capped.value;
+      let perInputVolt = capped.slopeA * availablePerInputVolt;
+      let perOutputVolt = capped.slopeA * availablePerOutputVolt;
+
+      // Stage loop. A charge controller holding a stage voltage does it by backing its duty cycle
+      // off as the target approaches, so the model tapers the delivered current to zero across the
+      // regulation window rather than computing a current from a headroom voltage. That keeps the
+      // output-voltage derivative bounded by delivered/window and, more importantly, valid across
+      // the whole window: a stiff regulator expressed as a current gives a linearisation good over
+      // a fraction of a millivolt, and Newton then cannot move at all. Until the controller has
+      // measured the pack it has no target, so it does not regulate.
+      if (this.state.nominalMultiple !== null) {
+        const window = electrical.outputRegulationBandVolts;
+        const taper = ramp((this.stageTargetVolts() - outputVolts) / window);
+        perInputVolt *= taper.value;
+        perOutputVolt = taper.value * perOutputVolt - (deliveredAmps * taper.slope) / window;
+        deliveredAmps *= taper.value;
+      }
+
+      // Delivered current leaves the device at the battery terminal, so it enters as a negative.
+      ctx.current(BATTERY_POSITIVE, BATTERY_NEGATIVE, -deliveredAmps, [
+        [PV_POSITIVE, -perInputVolt],
+        [PV_NEGATIVE, perInputVolt],
+        [BATTERY_POSITIVE, -perOutputVolt],
+        [BATTERY_NEGATIVE, perOutputVolt]
       ]);
     },
 
@@ -188,24 +220,27 @@ export function createChargeControllerDevice({ base }) {
           inputVolts <= electrical.maxInputVoltage * 0.95 && heatsinkC < limits.derateStartC;
         return recovered ? (isMppt ? "tracking" : "bulk") : "off";
       }
-      if (!isMppt) return this.state.stage;
+      // An MPPT has no regulating modes to switch into: all three of its loops are stamped at
+      // once and the solve decides which one binds. Only the shutdown states are discrete.
+      return isMppt ? "tracking" : this.state.stage;
+    },
 
-      const target = this.stageTargetVolts();
-      const currentLimit = this.chargeCurrentLimitAmps(heatsinkC);
+    /** Which of the three control loops is setting the output, for reporting. */
+    bindingLoop(ctx) {
+      if (this.mode === "off" || isOpen(this) || !isMppt) return null;
       const delivered = -(this.portCurrents.get(BATTERY_POSITIVE) ?? 0);
-
-      if (outputVolts >= target && this.state.stage !== STAGE_BULK) return "voltageLimited";
-      if (outputVolts >= target) return "voltageLimited";
-      if (this.mode === "voltageLimited") {
-        return outputVolts < target - 0.05 * target ? "tracking" : "voltageLimited";
+      if (delivered <= 0) return "none";
+      const heatsinkC = ctx.temperature(nodeName);
+      if (delivered >= this.chargeCurrentLimitAmps(heatsinkC) * 0.99) return "current-limit";
+      const outputVolts = ctx.across(BATTERY_POSITIVE, BATTERY_NEGATIVE);
+      // Inside the regulation window the stage loop is the one tapering the output back.
+      if (
+        this.state.nominalMultiple !== null &&
+        outputVolts >= this.stageTargetVolts() - electrical.outputRegulationBandVolts
+      ) {
+        return "stage-voltage";
       }
-      if (delivered > currentLimit * 1.001) return "currentLimited";
-      if (this.mode === "currentLimited") {
-        return inputVolts >= 0.98 * (this.state.referenceVolts ?? inputVolts) * 1.2
-          ? "tracking"
-          : "currentLimited";
-      }
-      return "tracking";
+      return "maximum-power";
     },
 
     /** Loss in the internal negative-rail bond, W. */
@@ -216,15 +251,35 @@ export function createChargeControllerDevice({ base }) {
       return (volts * volts) / Math.max(bondResistance, 1e-12);
     },
 
+    /** Loss in the two voltage sense dividers, W. */
+    bleedLossWatts(ctx) {
+      const inputVolts = ctx.across(PV_POSITIVE, PV_NEGATIVE);
+      const outputVolts = ctx.across(BATTERY_POSITIVE, BATTERY_NEGATIVE);
+      return (
+        (inputVolts * inputVolts) / electrical.inputBleedResistanceOhms +
+        (outputVolts * outputVolts) / electrical.outputBleedResistanceOhms
+      );
+    },
+
     heat(ctx) {
+      // The negative bond joins two ports, so its loss never appears in the difference between
+      // input and delivered power and always has to be added. The sense divider is different: it
+      // draws its current through the PV terminals, so wherever the loss is computed as input
+      // minus delivered it is already counted, and adding it again would invent heat.
       const bondLoss = this.bondLossWatts(ctx);
-      if (this.mode === "off" || isOpen(this)) return { [nodeName]: bondLoss };
+      if (this.mode === "off" || isOpen(this)) {
+        return { [nodeName]: bondLoss + this.bleedLossWatts(ctx) };
+      }
       if (!isMppt) {
         const passAmps = this.portCurrents.get(PV_POSITIVE) ?? 0;
         const passResistance =
           this.state.duty > 0 ? electrical.onResistanceOhms / this.state.duty : 0;
         return {
-          [nodeName]: passAmps * passAmps * passResistance + electrical.idleDrawWatts + bondLoss
+          [nodeName]:
+            passAmps * passAmps * passResistance +
+            electrical.idleDrawWatts +
+            bondLoss +
+            this.bleedLossWatts(ctx)
         };
       }
       const input = Math.max(this.inputWatts(ctx), 0);
@@ -256,7 +311,9 @@ export function createChargeControllerDevice({ base }) {
       if (isMppt) {
         this.state.sinceTrackSeconds += dt;
         const tracking = electrical.tracking;
-        if (this.mode === "tracking" && this.state.sinceTrackSeconds >= tracking.intervalSeconds) {
+        const loop = this.bindingLoop(ctx);
+        this.state.bindingLoop = loop;
+        if (loop === "maximum-power" && this.state.sinceTrackSeconds >= tracking.intervalSeconds) {
           const inputWatts = this.inputWatts(ctx);
           if (inputWatts < this.state.lastInputWatts) this.state.trackingDirection *= -1;
           this.state.referenceVolts = clamp(
@@ -266,11 +323,14 @@ export function createChargeControllerDevice({ base }) {
           );
           this.state.lastInputWatts = inputWatts;
           this.state.sinceTrackSeconds = 0;
-        } else if (this.mode !== "tracking") {
-          // Leave the reference where the array actually is, so returning to tracking does not
-          // start from a stale operating point.
+        } else if (loop !== "maximum-power") {
+          // Perturbing is pointless when something other than array power is setting the output:
+          // the observation carries no information about the maximum power point, and stepping on
+          // regardless would walk the reference off to a stale voltage. Park it where the array
+          // actually sits so power limiting resumes from the right place.
           const inputVolts = ctx.across(PV_POSITIVE, PV_NEGATIVE);
           if (inputVolts > 1) this.state.referenceVolts = inputVolts;
+          this.state.lastInputWatts = this.inputWatts(ctx);
         }
       } else {
         const limitAmps = this.chargeCurrentLimitAmps(ctx.temperature(nodeName));
@@ -328,6 +388,7 @@ export function createChargeControllerDevice({ base }) {
         efficiency: input > 0 ? delivered / input : 0,
         stage: this.state.stage,
         mode: this.mode,
+        bindingLoop: isMppt ? this.bindingLoop(ctx) : null,
         duty: isMppt ? null : this.state.duty,
         referenceVolts: this.state.referenceVolts,
         temperatureC: ctx.temperature(nodeName),

@@ -176,6 +176,14 @@
     "dc-immersion-heater": {
       "title": "Kanthal Nikrothal 80 element data (ref:nichrome-properties) applied to a 12 V DC immersion heating element",
       "note": "A bare resistance element has no electronics, so its current is set only by the alloy's resistivity at temperature. Used as the reference resistive DC load."
+    },
+    "noaa-denver-normals": {
+      "title": "NOAA NCEI 1991-2020 US Climate Normals, Denver International Airport, CO (USW00003017)",
+      "note": "Monthly mean temperature -0.4 C in January and 23.6 C in July; mean diurnal range near 15 C year round."
+    },
+    "dc-led-strip": {
+      "title": "12 V DC LED tape lighting circuit, generic",
+      "note": "A 12 V LED tape runs its diodes in strings of three behind a series resistor, so over its operating range the current follows the resistor rather than the diodes and the circuit measures as a resistance. Used as the small resistive DC load: cabin lighting is what an off-grid pack runs overnight."
     }
   },
   "simulation": {
@@ -184,14 +192,18 @@
     "metersPerGridSpace": 0.1,
     "metersPerGridSpaceSource": "assumption:editor scale, one 24 px grid square is 10 cm of conductor",
     "solver": {
-      "source": "assumption:numerical tolerances chosen well below any physically meaningful resolution, per ref:vlach-singhal",
+      "source": "assumption:tolerances follow the SPICE convergence defaults documented in ref:vlach-singhal (VNTOL 1 uV, RELTOL 1e-3, ABSTOL 1 pA), tightened where the extra precision is achievable; 1 uV and 1 nA are orders of magnitude below anything measurable in a solar installation",
       "gminSiemens": 1e-12,
-      "voltageAbsToleranceVolts": 1e-9,
-      "voltageRelTolerance": 1e-9,
-      "currentAbsToleranceAmps": 1e-10,
+      "voltageAbsToleranceVolts": 1e-6,
+      "voltageRelTolerance": 1e-6,
+      "currentAbsToleranceAmps": 1e-9,
       "maxNewtonIterations": 200,
       "lineSearchSteps": 12,
-      "modeIterationLimit": 40
+      "maxVoltageStepVolts": 10.0,
+      "maxVoltageStepSource": "assumption:junction voltage limiting per ref:vlach-singhal section 6.4. Without a trust region an early Newton step can throw a node hundreds of volts past any junction, where a linear-continued exponential contributes a conductance around 1e19 S and the matrix loses all its other entries to cancellation. 10 V per iteration is far larger than any junction's forward range and still reaches a 100 V array within the iteration limit",
+      "modeIterationLimit": 40,
+      "stagnantIterationLimit": 5,
+      "stagnantIterationSource": "assumption:once KCL holds to currentAbsToleranceAmps and five further Newton steps fail to improve the residual, the remaining motion is floating-point rounding in the stiffest equation of the system rather than physics"
     },
     "integrator": {
       "source": "assumption:step-size limits chosen so the fastest modelled state changes by a small fraction per step",
@@ -220,7 +232,9 @@
       "groundAlbedo": 0.2,
       "arrayTiltDeg": 40,
       "arrayAzimuthDeg": 180,
-      "arrayOrientationSource": "ref:nrel-denver-yield fixed open rack at 40 degree tilt facing due south; individual panels may override it"
+      "arrayOrientationSource": "ref:nrel-denver-yield fixed open rack at 40 degree tilt facing due south; individual panels may override it",
+      "indoorTemperatureC": 18.0,
+      "indoorTemperatureSource": "assumption:an unheated but enclosed space such as a garage or utility room, used for equipment marked as installed indoors. Real installations put the pack inside precisely because a lithium pack cannot be charged below freezing"
     },
     "atmosphere": {
       "source": "ref:bird-hulstrom-1981",
@@ -240,14 +254,19 @@
       "flameTemperatureC": 900
     },
     "weather": {
-      "source": "assumption:synthetic but deterministic cloud and ambient series; shape follows ref:pvwatts-v5",
+      "source": "assumption:synthetic but deterministic cloud series; shape follows ref:pvwatts-v5",
       "seed": 20240617,
       "cloudPeriodHours": 3.5,
       "cloudMeanClearness": 0.78,
       "cloudAmplitude": 0.35,
       "windSpeedMPerS": 1.5,
-      "dailyTemperatureMinC": 8,
-      "dailyTemperatureMaxC": 26,
+      "annualMeanTemperatureC": 11.6,
+      "annualTemperatureAmplitudeC": 12.0,
+      "annualTemperatureSource": "ref:noaa-denver-normals monthly means run from -0.4 C in January to 23.6 C in July, which is an annual mean of 11.6 C and a half-amplitude of 12.0 C",
+      "coldestDayOfYear": 10,
+      "coldestDaySource": "ref:noaa-denver-normals coldest daily normal falls in the second week of January",
+      "dailyTemperatureSwingC": 15.0,
+      "dailySwingSource": "ref:noaa-denver-normals mean diurnal range, the difference between the average daily maximum and minimum, is close to 15 C in every month",
       "temperatureMaxHour": 15,
       "temperatureMinHour": 5
     }
@@ -653,6 +672,8 @@
           "capacityFadePerEquivalentCycle": 6.7e-5,
           "capacityFadeSource": "derived:20 % capacity loss over 3000 equivalent full cycles, ref:lfp-cycle-life",
           "contactorResistanceOhms": 0.002,
+          "chargeBlockedResistanceOhms": 10000,
+          "chargeBlockedResistanceSource": "estimate:with the charge MOSFET off, the only path taking current into the pack is the BMS's own voltage sense and cell balancing network. A few milliamps across a 13 V pack puts it in the tens of kilohms; 10 kOhm is that order and makes the blocked branch carry milliamps rather than nothing",
           "contactorResistanceSource": "estimate:BMS MOSFET bank on-state resistance for a 100 A drop-in pack"
         },
         "limits": {
@@ -677,6 +698,10 @@
           "reconnectDelaySeconds": 60,
           "reconnectDelaySource": "estimate:BMS lockout before reclosing the contactor, so a sagging pack cannot chatter",
           "chargeLowTemperatureDisconnectC": 0,
+          "chargeLowTemperatureReconnectC": 5.0,
+          "chargeResumeStateOfCharge": 0.98,
+          "chargeResumeSource": "estimate:the BMS terminates charge when a cell reaches its over-voltage limit, which in this model is the top of the state-of-charge range, and lets it resume once the pack has given a couple of percent back. 2 % is the order of the reclose window on drop-in packs and keeps a full pack from cycling its charge FET",
+          "chargeLowTemperatureSource": "ref:battleborn-bb10012 blocks charging below 0 C to prevent lithium plating; the 5 C reclose is estimated hysteresis so a pack warming through freezing does not chatter",
           "damageTemperatureC": 90,
           "damageTemperatureSource": "ref:lfp-thermal-runaway separator melt begins well below the self-heating onset"
         },
@@ -761,6 +786,8 @@
           "capacityFadePerEquivalentCycle": 6.7e-5,
           "capacityFadeSource": "derived:20 % capacity loss over 3000 equivalent full cycles, ref:lfp-cycle-life",
           "contactorResistanceOhms": 0.002,
+          "chargeBlockedResistanceOhms": 10000,
+          "chargeBlockedResistanceSource": "estimate:with the charge MOSFET off, the only path taking current into the pack is the BMS's own voltage sense and cell balancing network. A few milliamps across a 13 V pack puts it in the tens of kilohms; 10 kOhm is that order and makes the blocked branch carry milliamps rather than nothing",
           "contactorResistanceSource": "estimate:BMS MOSFET bank on-state resistance for a 100 A rack pack"
         },
         "limits": {
@@ -785,6 +812,10 @@
           "reconnectDelaySeconds": 60,
           "reconnectDelaySource": "estimate:BMS lockout before reclosing the contactor, so a sagging pack cannot chatter",
           "chargeLowTemperatureDisconnectC": 0,
+          "chargeLowTemperatureReconnectC": 5.0,
+          "chargeResumeStateOfCharge": 0.98,
+          "chargeResumeSource": "estimate:the BMS terminates charge when a cell reaches its over-voltage limit, which in this model is the top of the state-of-charge range, and lets it resume once the pack has given a couple of percent back. 2 % is the order of the reclose window on drop-in packs and keeps a full pack from cycling its charge FET",
+          "chargeLowTemperatureSource": "ref:battleborn-bb10012 blocks charging below 0 C to prevent lithium plating; the 5 C reclose is estimated hysteresis so a pack warming through freezing does not chatter",
           "damageTemperatureC": 90,
           "damageTemperatureSource": "ref:lfp-thermal-runaway"
         },
@@ -974,6 +1005,10 @@
           "maxChargeCurrentAmps": 50,
           "idleDrawWatts": 0.3,
           "idleDrawSource": "derived:10 mA self consumption at a 12 V battery, ref:victron-mppt-100-50",
+          "inputBleedResistanceOhms": 100000.0,
+          "inputBleedSource": "estimate:every controller measures array voltage through a resistive divider across its PV input and bleeds the input capacitor through it; 100 kohm draws 0.4 mW at 65 V",
+          "outputBleedResistanceOhms": 100000.0,
+          "outputBleedSource": "estimate:the pack-voltage sense divider, the same order as the array one. It is what keeps the output rail defined when the pack stops accepting charge",
           "efficiencyCurve": [
             { "loadFraction": 0.1, "efficiency": 0.95 },
             { "loadFraction": 0.2, "efficiency": 0.965 },
@@ -983,15 +1018,23 @@
           ],
           "efficiencyCurveSource": "ref:victron-mppt-100-50 peak efficiency 98 %; the shape either side of the peak follows the published efficiency graph",
           "controlResistanceOhms": 0.05,
+          "inputRegulationBandVolts": 0.05,
+          "inputRegulationBandSource": "estimate:the input regulator has finite loop gain, so it holds its reference to within a band rather than exactly; 50 mV is the order of a hill-climbing tracker's error amplifier and is well below its 0.25 V tracking step",
+          "loopCurrentBandFraction": 0.02,
+          "loopCurrentFloorAmps": 0.0001,
+          "loopCurrentBandSource": "estimate:the width of the handover between the tracking, stage-voltage and charge-current loops, as a fraction of the current at which they meet. A control loop's error band scales with its operating point, so 2 % holds from a milliamp at dusk to the 50 A rating; the floor keeps it defined at zero current",
           "controlResistanceSource": "estimate:small-signal input regulation stiffness of the tracking loop, chosen far below the array's dynamic resistance",
-          "outputRegulationResistanceOhms": 0.02,
+          "outputRegulationBandVolts": 0.15,
+          "outputRegulationSource": "estimate:the load regulation window of the charge stage, about 1 % of a 14.4 V target. The controller tapers its duty cycle to zero across it, so in regulation the pack sits inside this band below the stage voltage",
           "outputRegulationResistanceSource": "estimate:output voltage regulation stiffness during absorption and float",
           "negativeBondResistanceOhms": 0.0001,
           "negativeBondSource": "estimate:internal negative bus bond of a non-isolated buck controller",
           "tracking": {
             "stepVolts": 0.25,
             "intervalSeconds": 2,
-            "source": "ref:esram-chapman typical perturb-and-observe step and dwell for a hill-climbing tracker"
+            "source": "ref:esram-chapman typical perturb-and-observe step and dwell for a hill-climbing tracker",
+            "maxIntegrationStepSeconds": 60.0,
+            "maxIntegrationStepSource": "derived:the tracker moves its reference by one stepVolts per call, so the integrator must call it often enough to follow the array. 60 s gives 1440 perturbations a day, worth 360 V of travel, against the roughly 10 V the maximum power point moves"
           },
           "stages": {
             "absorbVoltagePer12V": 14.4,
@@ -1053,10 +1096,20 @@
           "maxInputVoltage": 28,
           "maxChargeCurrentAmps": 30,
           "idleDrawWatts": 0.1,
+          "inputBleedResistanceOhms": 100000.0,
+          "inputBleedSource": "estimate:every controller measures array voltage through a resistive divider across its PV input and bleeds the input capacitor through it; 100 kohm draws 0.4 mW at 65 V",
+          "outputBleedResistanceOhms": 100000.0,
+          "outputBleedSource": "estimate:the pack-voltage sense divider, the same order as the array one. It is what keeps the output rail defined when the pack stops accepting charge",
           "onResistanceOhms": 0.012,
           "onResistanceSource": "derived:0.35 V drop at the 30 A rating",
           "controlResistanceOhms": 0.05,
-          "outputRegulationResistanceOhms": 0.02,
+          "inputRegulationBandVolts": 0.05,
+          "inputRegulationBandSource": "estimate:the input regulator has finite loop gain, so it holds its reference to within a band rather than exactly; 50 mV is the order of a hill-climbing tracker's error amplifier and is well below its 0.25 V tracking step",
+          "loopCurrentBandFraction": 0.02,
+          "loopCurrentFloorAmps": 0.0001,
+          "loopCurrentBandSource": "estimate:the width of the handover between the tracking, stage-voltage and charge-current loops, as a fraction of the current at which they meet. A control loop's error band scales with its operating point, so 2 % holds from a milliamp at dusk to the 50 A rating; the floor keeps it defined at zero current",
+          "outputRegulationBandVolts": 0.15,
+          "outputRegulationSource": "estimate:the load regulation window of the charge stage, about 1 % of a 14.4 V target. The controller tapers its duty cycle to zero across it, so in regulation the pack sits inside this band below the stage voltage",
           "negativeBondResistanceOhms": 0.0002,
           "negativeBondSource": "estimate:internal negative bus bond of a PWM controller",
           "stages": {
@@ -1479,7 +1532,9 @@
           "damageTemperatureC": 130,
           "damageMode": "open",
           "stallVoltageFraction": 0.8,
-          "stallVoltageSource": "estimate:a single-phase compressor cannot start below about 80 % of nameplate voltage"
+          "stallVoltageSource": "estimate:a single-phase compressor cannot start below about 80 % of nameplate voltage",
+          "overVoltageDamage": 132.0,
+          "overVoltageSource": "estimate:110 % of nameplate, the upper utilisation limit an appliance is built to tolerate; beyond it the motor run capacitor and starting electronics are out of spec"
         },
         "thermal": {
           "nodes": {
@@ -1592,6 +1647,73 @@
           "links": [],
           "heatNode": "housing",
           "source": "estimate:230 x 130 x 90 mm pump body; hydraulic output is small enough that essentially all input power appears as heat"
+        }
+      }
+    },
+    {
+      "id": "load-dc-led-12v-20w",
+      "group": "load",
+      "name": "12 V LED lighting circuit",
+      "description": "Cabin lighting on LED tape. The series resistors set the current, so the circuit behaves as a resistance.",
+      "gridSize": {
+        "width": 3,
+        "height": 2
+      },
+      "specifications": {
+        "Supply": "12 V DC",
+        "Rated power": "20 W at 12 V",
+        "Resistance": "7.2 Ω",
+        "Mass": "0.15 kg"
+      },
+      "terminals": [
+        {
+          "id": "positive",
+          "label": "+",
+          "role": "positive",
+          "domain": "dc",
+          "edge": "left",
+          "offset": 0.3
+        },
+        {
+          "id": "negative",
+          "label": "−",
+          "role": "negative",
+          "domain": "dc",
+          "edge": "left",
+          "offset": 0.7
+        }
+      ],
+      "model": {
+        "type": "load",
+        "source": "ref:dc-led-strip",
+        "electrical": {
+          "behaviour": "constantResistance",
+          "ratedVoltage": 12,
+          "ratedPowerWatts": 20,
+          "elementMaterial": "copper",
+          "elementMaterialSource": "estimate:the series resistors dominate and are metal film with a negligible temperature coefficient. Copper is the closest catalogued conductor, and over the 40 K the tape moves through it changes the draw by under a fifth of a watt"
+        },
+        "limits": {
+          "source": "estimate:LED junction and adhesive limits for tape mounted on an aluminium channel",
+          "overVoltageDamage": 16,
+          "damageTemperatureC": 85,
+          "damageMode": "open"
+        },
+        "thermal": {
+          "nodes": {
+            "channel": {
+              "material": "aluminium",
+              "massKg": 0.15,
+              "surface": {
+                "geometry": "verticalPlate",
+                "areaM2": 0.08,
+                "characteristicLengthM": 0.02
+              }
+            }
+          },
+          "links": [],
+          "heatNode": "channel",
+          "source": "estimate:2 m of tape bonded to a 20 mm aluminium channel, both faces convecting"
         }
       }
     },

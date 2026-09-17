@@ -22,12 +22,63 @@ Newton–Raphson: `J Δ = −F`, `J = ∂F/∂V`. Devices declare each contribut
 produces both `F` and `J`. A two-terminal conductance is the special case
 `i = g·(V_a − V_b)`.
 
-Convergence: `max|Δ| ≤ vAbsTol + vRelTol·max|V|` and `max|F| ≤ iAbsTol`. A damped line
-search on `‖F‖∞` accepts the largest `α ∈ {1, ½, ¼, …}` that reduces the residual; this is the
-standard damped-Newton safeguard for circuit solvers (`ref:vlach-singhal`).
+Convergence is both tests together, KCL and a settled solution:
+
+```
+|F_a| ≤ iAbsTol            for every node a
+|Δ_a| ≤ vAbsTol + vRelTol·|V_a|   for every node a
+```
+
+The voltage test is per node, as in SPICE, because a node's own voltage sets its tolerance.
+Scaling every node's step by the largest voltage anywhere in the circuit makes the test
+unreachable for a high-impedance node sitting beside a 48 V bus.
+
+A damped line search on `‖F‖∞` accepts the largest `α ∈ {1, ½, ¼, …}` that reduces the
+residual; this is the standard damped-Newton safeguard for circuit solvers
+(`ref:vlach-singhal`). Three refinements, each for a failure this engine actually produces:
+
+- **Trust region.** `‖Δ‖∞` is capped at `maxVoltageStepVolts` by scaling the whole vector.
+  A linearisation taken where a nonlinear branch is nearly off asks for a step of hundreds of
+  volts, and the exponentials on the far side swamp the matrix. Scaling the vector rather than
+  clamping each component preserves the Newton direction, which the line search needs.
+- **Full-step fallback.** If no `α` improves the residual, the full step is taken anyway when
+  it is less than 10× worse. One iteration before a nonlinear element snaps into place the
+  residual is expected to rise before it falls quadratically, and backtracking to a
+  two-thousandth of the step is paralysis rather than safety.
+- **Stagnation.** If KCL holds for `stagnantIterationLimit` consecutive iterations while the
+  voltage test still fails, the solution is accepted and flagged. A dark array's internal
+  junctions run at 1e-9 S in the same matrix as a battery at 0.015 Ω; rounding in the stiff
+  equations shows up on the weak nodes as steps no number of iterations will shrink.
 
 `gminSiemens` connects every node to its island reference. It keeps the matrix non-singular
 when a branch opens and represents real insulation leakage (`ref:vlach-singhal`).
+
+### 1.5 What the solver requires of a device characteristic
+
+`i(V)` must be continuous, and its stamped derivative must be the derivative of the current it
+stamps. Both are load-bearing, and violating either produces a specific, diagnosable failure:
+
+- A **discontinuity** defeats the line search, which compares residuals at trial voltages. A
+  jump of a few millivolts that moves the residual by two orders of magnitude means no `α` is
+  acceptable and the solve stalls where it stands. This is why the engine does not use SPICE's
+  junction limiting, whose `|ΔV| > 2 V_T` test is itself discontinuous.
+- An **inconsistent derivative** makes the Newton direction point somewhere other than downhill
+  on the residual, and the iteration stalls at a shallow minimum that is not a solution.
+- A **vanishing derivative** over the region the answer lies in gives the iteration nothing to
+  follow: it crawls by microvolts. A regulator whose gain goes to zero at the edge of its own
+  band does this.
+
+Hardware whose behaviour is a hard corner therefore gets that corner rounded over a *sourced*
+physical width, not an arbitrary epsilon. `engine/core/units.js` provides
+`softCorner(x, width)` (a `max(x, 0)` with a centred quadratic corner, both tails exact),
+`softMin(a, b, width)` for "whichever control loop binds first", `ramp(x)` for a saturating
+linear taper, and `limitedExponential` for diode exponentials, which continues linearly past
+its limit instead of overflowing.
+
+Where the hardware really is a switch rather than a rounded corner, it belongs in mode
+reconciliation (§1.3) instead. One exception is a strictly one-way branch, which is stamped as
+a direction-dependent conductance: continuous at the crossing, monotonic on both sides, and so
+a valid Newton target from either direction (§4).
 
 ### 1.2 Galvanic islands
 
@@ -92,6 +143,13 @@ solved with the same sparse LU. Backward Euler is unconditionally stable for any
 is repeated once at `T^{n+1}` (two Picard iterations), which keeps the nonlinear radiation
 term consistent without giving up stability.
 
+`T_amb` is per node. A node may carry an `ambientOverrideC`, used for convection, for
+radiation to ambient and for its initial temperature; `engine/world.js` sets it from the
+component's `indoors` flag, to `simulation.site.indoorTemperatureC`. One network still holds
+the whole installation, so a pack in a heated room and the array on the roof exchange heat
+with the surroundings each of them is actually in. Whether the battery is inside is the
+difference between a December day that charges it and one that does not (§4).
+
 ### 3.1 Natural convection
 
 Film temperature `T_f = (T_s + T_∞)/2`. Air properties scale from the reference values in
@@ -151,7 +209,37 @@ BMS: a series contactor opens on over-voltage, under-voltage, over-current (with
 catalog's inverse-time allowance), or over-temperature, and closes again only after the
 opposing hysteresis threshold is met. Open means the branch conductance becomes
 `gminSiemens`, so the battery genuinely disappears from the circuit instead of being deleted
-from the netlist.
+from the netlist. The condition has to hold for `protectionResponseSeconds` before the
+contactor moves, which is what lets a fuse clear a bolted fault before the pack disconnects.
+
+### 4.1 One-way charge path
+
+A BMS puts back-to-back MOSFETs between the cells and the terminals so it can open each
+direction independently. With the charge FET off the pack still supplies loads through the
+discharge FET, so the branch is one-way rather than open:
+
+```
+G = 1/R_int          V_t < OCV      (discharging, normal Thevenin)
+G = 1/R_blocked      V_t ≥ OCV      (BMS sense and balancing network only)
+I = (V_t − OCV)·G
+```
+
+`I` is continuous at `V_t = OCV`, where it is zero, and monotonic either side, so Newton
+converges to it from either direction (§1.5). `R_blocked` is the BMS's own voltage-sense and
+cell-balancing path, milliamps at pack voltage.
+
+Two conditions open the charge FET, each with its own hysteresis:
+
+- **Cold.** Below `chargeLowTemperatureDisconnectC` lithium plates onto the anode instead of
+  intercalating, so charging is locked out rather than derated (`ref:battleborn-bb10012`), and
+  resumes above `chargeLowTemperatureReconnectC`.
+- **Full.** At `SoC = 1` the cells are at their over-voltage limit and the pack stops
+  accepting current, resuming below `chargeResumeStateOfCharge`. Without this the coulombs a
+  controller pushes at a full pack would vanish, since `SoC` cannot exceed one — a silent leak
+  rather than an electrical consequence.
+
+Either way the pack goes on running the loads, so the consequence of a frozen pack is not a
+dead system: it is an array with nowhere to put its energy.
 
 Capacity fade: `Q_Ah` is multiplied by `1 − fade`, with `fade` accumulated per equivalent full
 cycle at the catalog's rate (`ref:lfp-cycle-life`).
@@ -203,23 +291,74 @@ minus the electrical power leaving the module.
 
 ## 6. Charge controller
 
-MPPT: the input port is regulated to `V_ref` through the control conductance
-`G_ctrl = 1/R_ctrl`, i.e. `I_in = G_ctrl (V_in − V_ref)`. Between steps, perturb-and-observe
-moves `V_ref` by `±ΔV` in the direction that increased `P_in`, which tracks the actual I–V
-curve rather than assuming a fixed `Vmp` (`ref:esram-chapman`). Output current into the
-battery bus is
+### 6.1 Sense dividers
+
+Both ports carry a resistive voltage divider in every mode, including off: a controller has to
+measure array and pack voltage to do anything at all, and `inputBleedResistanceOhms` /
+`outputBleedResistanceOhms` are those dividers. They are also what keeps the two nodes defined.
+Without the input divider a dark array feeding a tracker that has not yet chosen a reference is
+a pure open circuit; without the output one, a pack that has stopped accepting charge (§4.1)
+leaves the output rail floating between two elements that both carry no current.
+
+### 6.2 Three simultaneous loops
+
+An MPPT runs three control loops at once, and the hardware obeys whichever binds. All three are
+stamped together and combined with `softMin`, rather than selected by a mode, because a mode
+switch between two branches that each look right to the linearisation makes the iteration
+oscillate.
+
+**Input (maximum-power) loop.** Draw current in proportion to how far the array sits above the
+tracking reference, over the regulation band `V_band = inputRegulationBandVolts`:
 
 ```
-I_out = (η(P_in) P_in − P_idle) / V_out
+I_in = softCorner(V_in − V_ref, V_band) / R_ctrl
 ```
 
-with the derivative terms `∂I_out/∂V_in` and `∂I_out/∂V_out` supplied to the Jacobian, which
-is what makes DC sag on either side propagate to the other.
+Between steps, perturb-and-observe moves `V_ref` by `±ΔV` in the direction that increased
+`P_in`, which tracks the actual I–V curve rather than assuming a fixed `Vmp`
+(`ref:esram-chapman`). Before the first perturbation there is no reference: the controller is
+measuring open-circuit voltage, so `V_ref = +∞` and the loop draws nothing. That is different
+from `V_ref = V_in`, which would sit exactly on the corner.
+
+**Current loop.** A flat ceiling `I_max(T_heatsink)` competing with what the array can supply:
+
+```
+I_avail = (η(P_in) P_in − P_idle) / V_out
+I = softMin(I_avail, I_max, w),   w = max(|I_avail|, |I_max|, I_floor)·loopCurrentBandFraction
+```
+
+The handover band is a *fraction* of the currents being compared, so the same rounding works at
+a milliamp after sunset and at the 50 A rating. A fixed band wide enough for 50 A swallows the
+whole operating range at dusk.
+
+**Stage loop.** A controller holds a stage voltage by backing its duty cycle off as the target
+approaches, so the delivered current is tapered to zero across the regulation window rather
+than derived from a headroom voltage:
+
+```
+I_out = I · ramp((V_target − V_out) / outputRegulationBandVolts)
+```
+
+Expressing a stiff regulator as a current through a small resistance gives a linearisation
+valid over a fraction of a millivolt, and Newton then cannot move at all. The taper's derivative
+is bounded by `I/window` and valid across the whole window. The ramp is linear rather than an
+S-curve because a smoothstep's slope vanishes at both ends of the transition, which is where the
+operating point sits (§1.5).
+
+`∂I_out/∂V_in` and `∂I_out/∂V_out` are both supplied to the Jacobian, including the negative
+incremental conductance a constant-power output really presents, which is what makes DC sag on
+either side propagate to the other.
 
 Stages: `bulk` (current limit `I_max`), `absorb` (regulate `V_out` to `absorbVoltage` until
 current falls below `tailCurrentFraction` or `absorbHoldSeconds` elapses), `float` (regulate to
 `floatVoltage`). Input over-voltage above `maxInputVoltage` disconnects; heatsink temperature
-above the derate threshold scales `I_max` linearly to zero at shutdown.
+above the derate threshold scales `I_max` linearly to zero at shutdown. Which loop is binding is
+reported rather than assumed, and the tracker perturbs only while the maximum-power loop binds:
+hill-climbing against a controller that is voltage-limited measures the pack, not the array.
+
+Because perturb-and-observe acts once per call, the device caps the integrator's step at
+`tracking.maxIntegrationStepSeconds` (§12); a longer step would quietly make the tracker slower
+than the hardware it stands for.
 
 PWM: a duty-cycled switch between array and battery, average conductance `d/R_on`, `d`
 adjusted by the same stage machine. No boost/buck action, so the array runs at battery
@@ -255,10 +394,23 @@ Protection:
 
 | behaviour | model |
 |---|---|
-| `constantPower` | `I = P/V` above `minOperatingVoltage`, with `∂I/∂V = −P/V²`; below it the load drops out |
+| `constantPower` | `G = P/V²` recomputed each iteration, so `I = P/V` at the answer; below `minOperatingVoltage` the load drops out |
 | `constantResistance` | `R = V_rated²/P_rated`, optional material temperature coefficient |
 | `incandescent` | `R(T_fil) = R_ref (T_K/T_refK)^1.2`; filament and envelope thermal nodes; cold-start inrush is emergent, not a multiplier |
 | `compressor` | duty-cycled constant power with an inrush period of `inrushMultiple × P` for `inrushSeconds` at each start |
+
+A regulated load draws `P/V`, which is negative incremental conductance: pull the bus down and
+it draws more. That slope is only safe while something stiff holds the bus. Let the supply stop
+conducting — a cold pack blocking charge, a controller tapered off at its stage voltage — and
+the load's own node goes negative, at which point a Newton step climbs away from the solution
+and the bus runs off to nowhere. The secant conductance `P/V²` passes the same current at the
+answer and is positive everywhere, so the iteration walks down to where the supply picks up
+again.
+
+The characteristic is bounded at both ends. Below a knee the input stage cannot hold its output
+and turns resistive, and above `overVoltageDamage` it is not regulating anything either, which
+also removes the spurious high-voltage equilibrium that `P/V` has against a high-impedance
+supply.
 
 Under- and over-voltage damage accumulate against the catalog's `damage` thresholds; a
 damaged load goes open or short according to its `damageMode`.
@@ -298,16 +450,31 @@ type is exempt from any mechanism.
 ## 11. Environment
 
 - Solar position: NOAA / Meeus low-precision algorithm — fractional year, equation of time,
-  declination, hour angle, elevation and azimuth (`ref:noaa-solar`).
+  declination, hour angle, elevation and azimuth (`ref:noaa-solar`). Azimuth is measured
+  clockwise from north, so a negative hour angle (morning) is east of south: getting that branch
+  backwards mirrors the whole day and shows up as an east-facing roof peaking in the afternoon.
 - Clear sky: Bird & Hulstrom broadband model for DNI, DHI and GHI from air mass, pressure,
   ozone, precipitable water, aerosol optical depth and ground albedo
   (`ref:bird-hulstrom-1981`).
 - Transposition: Hay–Davies anisotropic sky on a tilted plane plus isotropic ground reflection
   (`ref:duffie-beckman`).
 - Weather: a seeded value-noise cloud series multiplying the clear-sky beam and diffuse
-  components with the documented beam/diffuse split, and a two-piece sinusoidal daily ambient
-  curve pinned to sunrise and mid-afternoon (`ref:pvwatts-v5`). Deterministic for a given
-  seed.
+  components with the documented beam/diffuse split (`ref:pvwatts-v5`). Deterministic for a
+  given seed.
+- Ambient temperature is an annual cycle carrying a daily one:
+
+  ```
+  T_mean(d) = T_annualMean − A_annual·cos(2π (d − d_coldest)/365)
+  T(h, d)   = T_mean(d) − (ΔT_daily/2)·cos(π·φ(h))
+  ```
+
+  where `φ` runs 0 → 1 from the pre-dawn minimum to the mid-afternoon maximum and 1 → 2 back
+  again, so each arc is half a cosine and the two meet with matching slope. Amplitudes come
+  from station normals (`ref:noaa-denver-normals`). Without the annual term a December day runs
+  at July temperatures, which is the difference between a pack that accepts charge and one that
+  is locked out (§4.1).
+- Equipment marked `indoors` uses `simulation.site.indoorTemperatureC` as its thermal ambient
+  (§3) rather than the outdoor series.
 - Extraterrestrial irradiance `1361 W/m²` with the eccentricity correction
   (`ref:si-constants`, `ref:duffie-beckman`).
 
@@ -318,6 +485,10 @@ state change (temperature rise per step, SoC change per step, damage-integral ch
 compares it with the catalog's per-step limits: `Δt` shrinks by `stepShrink` on rejection and
 grows by `stepGrow` when the step is comfortably inside the limits, bounded by
 `[minStepSeconds, maxStepSeconds]`.
+
+A device may cap the step further through `maxStepSeconds()`. Anything that acts once per call
+rather than continuously — an MPPT's perturb-and-observe being the case in point — is only as
+fast as the step allows, so the bound belongs with the device rather than in the global setting.
 
 Discrete transitions are event functions `g(state)` that a device declares. A step is rejected
 if any `g` changes sign, and the crossing is bisected to `eventToleranceSeconds` before the
