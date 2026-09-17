@@ -629,6 +629,7 @@
       "id": "battery-lifepo4-12v-100ah",
       "group": "battery",
       "name": "12 V 100 Ah LiFePO4",
+      "shortName": "12 V 100 Ah",
       "description": "Four LiFePO4 cells in series with an integrated BMS contactor.",
       "gridSize": { "width": 5, "height": 3 },
       "specifications": {
@@ -743,6 +744,7 @@
       "id": "battery-lifepo4-48v-100ah",
       "group": "battery",
       "name": "48 V 100 Ah LiFePO4 rack",
+      "shortName": "48 V 100 Ah",
       "description": "Sixteen LiFePO4 cells in series in a rack enclosure with a BMS contactor.",
       "gridSize": { "width": 5, "height": 3 },
       "specifications": {
@@ -857,6 +859,7 @@
       "id": "pv-mono-300w",
       "group": "pv",
       "name": "300 W mono PV module",
+      "shortName": "300 W panel",
       "description": "Sixty-cell monocrystalline module with three bypass diodes.",
       "gridSize": { "width": 6, "height": 4 },
       "specifications": {
@@ -928,6 +931,7 @@
       "id": "pv-mono-100w",
       "group": "pv",
       "name": "100 W 12 V PV module",
+      "shortName": "100 W panel",
       "description": "Thirty-six-cell monocrystalline module sized for a 12 volt battery.",
       "gridSize": { "width": 5, "height": 3 },
       "specifications": {
@@ -999,6 +1003,7 @@
       "id": "controller-mppt-50a",
       "group": "controller",
       "name": "MPPT 100/50 charge controller",
+      "shortName": "MPPT 50 A",
       "description": "Maximum-power-point tracking controller, 100 V PV input, 50 A charge.",
       "gridSize": { "width": 5, "height": 3 },
       "specifications": {
@@ -1091,6 +1096,7 @@
       "id": "controller-pwm-30a",
       "group": "controller",
       "name": "PWM 30 A charge controller",
+      "shortName": "PWM 30 A",
       "description": "Pulse-width-modulated controller that clamps the array to battery voltage.",
       "gridSize": { "width": 4, "height": 3 },
       "specifications": {
@@ -1165,6 +1171,7 @@
       "id": "inverter-12v-1000w",
       "group": "inverter",
       "name": "12 V 1 kW inverter",
+      "shortName": "12 V 1 kW",
       "description": "Isolated 12 volt inverter, 1,000 W continuous at 120 V AC.",
       "gridSize": { "width": 5, "height": 3 },
       "specifications": {
@@ -1266,6 +1273,7 @@
       "id": "inverter-48v-2400w",
       "group": "inverter",
       "name": "48 V 2.4 kW inverter",
+      "shortName": "48 V 2.4 kW",
       "description": "Isolated 48 volt inverter, 2,400 W continuous at 120 V AC.",
       "gridSize": { "width": 6, "height": 4 },
       "specifications": {
@@ -1367,6 +1375,7 @@
       "id": "load-incandescent-100w",
       "group": "load",
       "name": "100 W incandescent lamp",
+      "shortName": "100 W lamp",
       "description": "Tungsten filament lamp. Resistance follows filament temperature, so cold inrush is emergent.",
       "gridSize": { "width": 3, "height": 3 },
       "specifications": {
@@ -1431,6 +1440,7 @@
       "id": "load-led-10w",
       "group": "load",
       "name": "10 W LED lamp",
+      "shortName": "10 W LED",
       "description": "Driver-fed LED lamp: constant power above its minimum supply voltage.",
       "gridSize": { "width": 3, "height": 3 },
       "specifications": {
@@ -1477,6 +1487,7 @@
       "id": "load-hair-dryer-1500w",
       "group": "load",
       "name": "1,500 W hair dryer",
+      "shortName": "Hair dryer",
       "description": "Nichrome element with a fan: constant resistance, cooled by its own air stream.",
       "gridSize": { "width": 5, "height": 3 },
       "specifications": {
@@ -1529,6 +1540,7 @@
       "id": "load-fridge-120w",
       "group": "load",
       "name": "Refrigerator",
+      "shortName": "Fridge",
       "description": "Duty-cycled compressor with locked-rotor inrush at each start.",
       "gridSize": { "width": 5, "height": 4 },
       "specifications": {
@@ -1585,6 +1597,7 @@
       "id": "load-dc-fridge-12v-45w",
       "group": "load",
       "name": "12 V DC fridge",
+      "shortName": "12 V fridge",
       "description": "DC compressor fridge wired straight to the battery bus. Duty-cycled, with locked-rotor inrush and its own low-voltage cut-out.",
       "gridSize": { "width": 5, "height": 4 },
       "specifications": {
@@ -1639,6 +1652,7 @@
       "id": "load-dc-pump-12v-90w",
       "group": "load",
       "name": "12 V DC water pump",
+      "shortName": "12 V pump",
       "description": "Diaphragm pump with an internal bypass, so it draws close to constant power.",
       "gridSize": { "width": 4, "height": 3 },
       "specifications": {
@@ -1685,6 +1699,7 @@
       "id": "load-dc-led-12v-20w",
       "group": "load",
       "name": "12 V LED lighting circuit",
+      "shortName": "12 V lights",
       "description": "Cabin lighting on LED tape. The series resistors set the current, so the circuit behaves as a resistance.",
       "gridSize": {
         "width": 3,
@@ -1752,6 +1767,7 @@
       "id": "load-dc-heater-12v-100w",
       "group": "load",
       "name": "12 V DC heating element",
+      "shortName": "12 V heater",
       "description": "Bare Ni80Cr20 element. No electronics, so current follows Ohm's law at the element's temperature.",
       "gridSize": { "width": 4, "height": 3 },
       "specifications": {
@@ -1805,6 +1821,7 @@
       "id": "fuse-anl-100a",
       "group": "protection",
       "name": "100 A ANL fuse",
+      "shortName": "100 A ANL",
       "description": "Bolt-down DC fuse. Opens permanently on its time-current curve.",
       "gridSize": { "width": 3, "height": 2 },
       "specifications": {
@@ -1858,6 +1875,7 @@
       "id": "fuse-anl-200a",
       "group": "protection",
       "name": "200 A ANL fuse",
+      "shortName": "200 A ANL",
       "description": "Bolt-down DC fuse for main battery feeds.",
       "gridSize": { "width": 3, "height": 2 },
       "specifications": {
@@ -1911,6 +1929,7 @@
       "id": "fuse-atc-30a",
       "group": "protection",
       "name": "30 A blade fuse",
+      "shortName": "30 A",
       "description": "Automotive blade fuse for branch circuits.",
       "gridSize": { "width": 2, "height": 2 },
       "specifications": {
@@ -1964,6 +1983,7 @@
       "id": "breaker-dc-50a",
       "group": "protection",
       "name": "50 A DC breaker",
+      "shortName": "50 A DC",
       "description": "Thermal DC circuit breaker with a manual reset.",
       "gridSize": { "width": 3, "height": 2 },
       "specifications": {
@@ -2020,6 +2040,7 @@
       "id": "breaker-ac-15a",
       "group": "protection",
       "name": "15 A AC breaker",
+      "shortName": "15 A AC",
       "description": "Thermal-magnetic branch breaker with a manual reset.",
       "gridSize": { "width": 3, "height": 2 },
       "specifications": {
@@ -2076,6 +2097,7 @@
       "id": "breaker-ac-20a",
       "group": "protection",
       "name": "20 A AC breaker",
+      "shortName": "20 A AC",
       "description": "Thermal-magnetic branch breaker with a manual reset.",
       "gridSize": { "width": 3, "height": 2 },
       "specifications": {
@@ -2132,6 +2154,7 @@
       "id": "switch-dc-300a",
       "group": "protection",
       "name": "300 A battery switch",
+      "shortName": "Switch",
       "description": "Manual battery disconnect.",
       "gridSize": { "width": 3, "height": 2 },
       "specifications": {
@@ -2176,6 +2199,7 @@
       "id": "busbar-250a",
       "group": "protection",
       "name": "250 A busbar",
+      "shortName": "250 A busbar",
       "description": "Four-way copper busbar with real resistance.",
       "gridSize": { "width": 3, "height": 4 },
       "specifications": {

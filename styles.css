@@ -101,6 +101,7 @@ h3 { margin-bottom: 0.65rem; font-size: 0.95rem; }
 .header-controls, .toolbar-group, .filter-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.5rem;
 }
 .header-controls label { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; }
@@ -133,6 +134,7 @@ h3 { margin-bottom: 0.65rem; font-size: 0.95rem; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 1rem;
 }
 .count-badge {
@@ -146,6 +148,22 @@ h3 { margin-bottom: 0.65rem; font-size: 0.95rem; }
 }
 
 .filter-row { margin: 1rem 0; flex-wrap: wrap; }
+.inline-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.inline-control select { padding: 0.2rem 0.35rem; font-size: 0.72rem; }
+/* A flex display would otherwise win over the UA rule for [hidden]. */
+.inline-control[hidden] { display: none; }
+
 .filter-button { padding: 0.4rem 0.6rem; font-size: 0.75rem; }
 .filter-button.active { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
 
@@ -171,11 +189,24 @@ h3 { margin-bottom: 0.65rem; font-size: 0.95rem; }
   border-top: 1px solid var(--border);
 }
 .wire-help p { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.75rem; line-height: 1.4; }
+.wire-help label { display: grid; gap: 0.25rem; margin-top: 0.5rem; color: var(--muted); font-size: 0.7rem; font-weight: 700; }
+.wire-help select { width: 100%; }
 .wire-swatch { width: 28px; height: 3px; margin-top: 0.55rem; flex: none; background: var(--wire); }
 
 .workspace-panel { display: flex; flex-direction: column; }
-.workspace-toolbar { min-height: 54px; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--border); }
-.selection-label { max-width: 15rem; overflow: hidden; color: var(--muted); font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
+/* Two rows, always. The selection controls come and go with the selection, and the board must
+   not jump under the pointer when they do. */
+.workspace-toolbar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45rem;
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+.workspace-toolbar .toolbar-group { min-width: 0; }
+.toolbar-actions #clear-button { margin-left: auto; }
+.toolbar-selection { min-height: 2.3rem; }
+.selection-label { flex: 1 1 6rem; max-width: 15rem; overflow: hidden; color: var(--muted); font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
 .danger-button { color: var(--hazard); }
 
 .circuit-board {
@@ -206,7 +237,9 @@ h3 { margin-bottom: 0.65rem; font-size: 0.95rem; }
   filter: drop-shadow(0 0 2px #fff36b) drop-shadow(0 0 6px #e82700);
   animation: wire-fire 0.45s linear infinite;
 }
-.wire.preview { display: none; stroke-dasharray: 6 5; opacity: 0.75; }
+/* The preview follows the cursor, so it must never be what the cursor hits: the drop target is
+   found by hit-testing the point the pointer was released at. */
+.wire.preview { display: none; stroke-dasharray: 6 5; opacity: 0.75; pointer-events: none; }
 
 .circuit-component {
   position: absolute;
@@ -214,7 +247,7 @@ h3 { margin-bottom: 0.65rem; font-size: 0.95rem; }
   min-width: 72px;
   display: grid;
   place-items: center;
-  padding: 0.65rem 1.15rem;
+  padding: 0.15rem 0.3rem;
   border: 2px solid var(--ink);
   border-radius: 8px;
   background: var(--surface-strong);
@@ -222,14 +255,25 @@ h3 { margin-bottom: 0.65rem; font-size: 0.95rem; }
   cursor: move;
   user-select: none;
 }
+/* Group tints: what a part is should be readable before its name is. */
+.pv-component { background: color-mix(in srgb, var(--wire) 14%, var(--surface-strong)); }
+.battery-component { background: color-mix(in srgb, var(--accent) 16%, var(--surface-strong)); }
+.chargeController-component { background: color-mix(in srgb, var(--accent) 8%, var(--surface-strong)); }
+.inverter-component { background: color-mix(in srgb, var(--ac) 16%, var(--surface-strong)); }
+.load-component { background: var(--surface); }
+.fuse-component, .breaker-component, .switch-component, .busbar-component {
+  background: color-mix(in srgb, var(--positive) 10%, var(--surface-strong));
+}
+/* Equipment installed indoors is in a conditioned space, which the thermal model honours. */
+.circuit-component.indoors { border-style: double; border-width: 4px; }
 .circuit-component.selected { outline: 4px solid color-mix(in srgb, var(--accent) 45%, transparent); }
 .circuit-component.hazard { border-color: var(--hazard); box-shadow: 3px 3px 0 var(--hazard); }
-.circuit-component.on-fire:not(.load-component) {
+.circuit-component.on-fire {
   border-color: #e82700;
   box-shadow: 0 0 8px #ffb000, 0 0 18px color-mix(in srgb, #e82700 70%, transparent);
 }
-.circuit-component.on-fire:not(.load-component)::before,
-.circuit-component.on-fire:not(.load-component)::after {
+.circuit-component.on-fire::before,
+.circuit-component.on-fire::after {
   content: "";
   position: absolute;
   z-index: 3;
@@ -243,14 +287,38 @@ h3 { margin-bottom: 0.65rem; font-size: 0.95rem; }
   filter: drop-shadow(0 -2px 3px color-mix(in srgb, #e82700 75%, transparent));
   animation: component-fire 0.55s ease-in-out infinite alternate;
 }
-.circuit-component.on-fire:not(.load-component)::before { left: 2%; }
-.circuit-component.on-fire:not(.load-component)::after {
+.circuit-component.on-fire::before { left: 2%; }
+.circuit-component.on-fire::after {
   right: 2%;
   animation-delay: -0.3s;
   transform: scaleX(-1);
 }
-.component-name { max-width: 100%; text-align: center; font-size: 0.82rem; font-weight: 850; line-height: 1.2; }
-.component-reading { margin-top: 0.35rem; color: var(--muted); font-size: 0.7rem; font-variant-numeric: tabular-nums; }
+/* The box is the part's real extent in metres, which the fire model measures gaps with, so the
+   label has to fit the box rather than the box the label. */
+.component-label {
+  display: grid;
+  place-content: center;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.component-name {
+  max-width: 100%;
+  text-align: center;
+  font-size: 0.62rem;
+  font-weight: 850;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.component-reading {
+  margin-top: 0.1rem;
+  color: var(--muted);
+  font-size: 0.56rem;
+  line-height: 1.05;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
 
 @keyframes wire-fire {
   to { stroke-dashoffset: -25; filter: drop-shadow(0 0 4px #fff36b) drop-shadow(0 0 9px #e82700); }
@@ -263,8 +331,8 @@ h3 { margin-bottom: 0.65rem; font-size: 0.95rem; }
 
 @media (prefers-reduced-motion: reduce) {
   .wire.on-fire,
-  .circuit-component.on-fire:not(.load-component)::before,
-  .circuit-component.on-fire:not(.load-component)::after { animation: none; }
+  .circuit-component.on-fire::before,
+  .circuit-component.on-fire::after { animation: none; }
 }
 
 .terminal {
@@ -323,9 +391,16 @@ h3 { margin-bottom: 0.65rem; font-size: 0.95rem; }
 .metrics dt { color: var(--muted); font-size: 0.78rem; }
 .metrics dd { margin: 0; font-size: 0.8rem; font-weight: 800; text-align: right; }
 .environment-section, .component-status-section, .hazard-section { margin-top: 1rem; }
-.ambient-control { display: grid; gap: 0.3rem; color: var(--muted); font-size: 0.72rem; font-weight: 700; }
-.ambient-control input { width: 100%; }
-.cooling-note { margin: 0.45rem 0 0; color: var(--muted); font-size: 0.68rem; }
+.site-note { margin: 0.45rem 0 0; color: var(--muted); font-size: 0.68rem; line-height: 1.4; }
+.notice {
+  margin: 0.6rem 0 0;
+  padding: 0.5rem 0.6rem;
+  border-left: 4px solid var(--ac);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ac) 12%, transparent);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
 .status-list { display: grid; gap: 0.55rem; }
 .item-card, .hazard-card, .safe-message, .muted {
   margin: 0;
@@ -342,6 +417,7 @@ h3 { margin-bottom: 0.65rem; font-size: 0.95rem; }
 .charge-track { height: 7px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--ink) 15%, transparent); }
 .charge-fill { height: 100%; background: var(--accent); }
 .hazard-card { background: var(--hazard-soft); color: var(--hazard); border-left: 4px solid var(--hazard); line-height: 1.35; }
+.hazard-card.critical { font-weight: 800; box-shadow: inset 0 0 0 1px var(--hazard); }
 .safe-message { color: var(--accent); }
 .muted { color: var(--muted); }
 
@@ -378,6 +454,5 @@ h3 { margin-bottom: 0.65rem; font-size: 0.95rem; }
   .workspace-panel { min-height: 560px; }
   .simulation-panel { grid-column: auto; grid-template-columns: 1fr; }
   .simulation-panel > .panel-heading, .simulation-panel > .simulation-controls { grid-column: auto; }
-  .workspace-toolbar { align-items: flex-start; flex-direction: column; }
-  .toolbar-group { width: 100%; justify-content: space-between; }
+  .toolbar-group { width: 100%; }
 }

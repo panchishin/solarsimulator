@@ -33,33 +33,42 @@
           </div>
           <span id="palette-count" class="count-badge">0</span>
         </div>
-        <div id="palette-filters" class="filter-row" role="group" aria-label="Filter component groups">
-          <button class="filter-button active" type="button" data-filter="all">All</button>
-          <button class="filter-button" type="button" data-filter="battery">Battery</button>
-          <button class="filter-button" type="button" data-filter="inverter">Inverter</button>
-          <button class="filter-button" type="button" data-filter="load">Load</button>
-        </div>
+        <div id="palette-filters" class="filter-row" role="group" aria-label="Filter component groups"></div>
         <div id="palette" class="palette-list"></div>
         <div class="wire-help">
           <span class="wire-swatch" aria-hidden="true"></span>
           <div>
             <strong>Wire tool</strong>
-            <p>Drag from one terminal to another. Invalid connections remain visible with a hazard warning.</p>
+            <p>Drag from one terminal to another. The gauge you pick is the gauge the engine heats.</p>
+            <label>New wire gauge
+              <select id="wire-type-select"></select>
+            </label>
           </div>
         </div>
       </aside>
 
       <section class="workspace-panel" aria-label="Circuit design workspace">
         <div class="workspace-toolbar">
-          <div class="toolbar-group">
+          <div class="toolbar-group toolbar-actions">
             <button id="undo-button" type="button" title="Undo (Ctrl/Cmd+Z)">Undo</button>
             <button id="redo-button" type="button" title="Redo (Ctrl/Cmd+Shift+Z)">Redo</button>
             <button id="rotate-button" type="button" title="Rotate selected component (R)">Rotate 90°</button>
             <button id="delete-button" type="button" title="Delete selected item">Delete</button>
-          </div>
-          <div class="toolbar-group">
-            <span id="selection-label" class="selection-label">Nothing selected</span>
             <button id="clear-button" class="danger-button" type="button">Clear grid</button>
+          </div>
+          <div class="toolbar-group toolbar-selection">
+            <span id="selection-label" class="selection-label">Nothing selected</span>
+            <label id="indoors-row" class="inline-control" hidden>
+              <input id="indoors-input" type="checkbox">
+              Installed indoors
+            </label>
+            <label id="wire-row" class="inline-control" hidden>
+              Gauge
+              <select id="selected-wire-type"></select>
+            </label>
+            <button id="switch-row" class="inline-control" type="button" hidden>
+              <span id="switch-button">Open the switch</span>
+            </button>
           </div>
         </div>
         <div id="circuit-board" class="circuit-board" role="region" tabindex="0" aria-label="Circuit design grid">
@@ -95,20 +104,29 @@
             Ticks per second
             <input id="rate-input" type="number" min="0.1" max="20" step="0.1" value="1">
           </label>
+          <label>
+            Start of the day
+            <input id="start-input" type="datetime-local" value="2024-06-21T09:00">
+          </label>
         </div>
         <dl class="metrics">
+          <div><dt>Site clock</dt><dd id="clock-value">--</dd></div>
           <div><dt>Elapsed time</dt><dd id="elapsed-value">0 min</dd></div>
-          <div><dt>Total stored</dt><dd id="energy-value">0 Wh</dd></div>
-          <div><dt>Battery current</dt><dd id="current-value">0 A</dd></div>
-          <div><dt>Inverter</dt><dd id="inverter-value">Not connected</dd></div>
+          <div><dt>Stored</dt><dd id="energy-value">0 Wh</dd></div>
+          <div><dt>Generating</dt><dd id="generation-value">0 W</dd></div>
+          <div><dt>Loads</dt><dd id="load-value">0 W</dd></div>
         </dl>
+        <p id="notice" class="notice" hidden></p>
         <section class="environment-section">
-          <h3>Environment</h3>
-          <label class="ambient-control">
-            Ambient temperature (°C)
-            <input id="ambient-input" type="number" step="0.1" value="20">
-          </label>
-          <p class="cooling-note">Cooling coefficient: <strong id="cooling-value">0.01/min</strong></p>
+          <h3>Weather</h3>
+          <dl class="metrics">
+            <div><dt>Ambient</dt><dd id="ambient-value">--</dd></div>
+            <div><dt>Horizontal sun</dt><dd id="irradiance-value">--</dd></div>
+            <div><dt>Sun</dt><dd id="sun-value">--</dd></div>
+            <div><dt>Sky</dt><dd id="sky-value">--</dd></div>
+            <div><dt>Wind</dt><dd id="wind-value">--</dd></div>
+          </dl>
+          <p class="site-note">Site: <strong id="site-value">--</strong></p>
         </section>
         <section class="component-status-section">
           <h3>Components &amp; wires</h3>

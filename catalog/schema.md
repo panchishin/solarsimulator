@@ -100,6 +100,7 @@ rating. Length comes from the layout geometry at run time.
   "id": "battery-lifepo4-12v-100ah",
   "group": "battery",
   "name": "...",
+  "shortName": "...",
   "description": "...",
   "gridSize": { "width": 5, "height": 3 },
   "specifications": { "<label>": "<display string>" },
@@ -111,7 +112,10 @@ rating. Length comes from the layout geometry at run time.
 }
 ```
 
-`specifications` is display text for the UI and carries no numbers the engine reads.
+`specifications` is display text for the UI and carries no numbers the engine reads. `shortName`
+is what fits on the part as drawn: `gridSize` is the component's real footprint, in grid spaces
+that `simulation.metersPerGridSpace` converts to metres for wire length and fire spread, so the
+label has to fit the box rather than the box the label.
 `terminals[].role` and `.domain` are consumed by the netlist; `.reference: true` marks a
 terminal that is a preferred ground for its galvanic island (battery negative, inverter AC
 neutral).
