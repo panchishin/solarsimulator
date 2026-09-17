@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/simulation.test.js",
+    "test": "npm run test:legacy && npm run test:engine",
+    "test:legacy": "node --test tests/simulation.test.js",
+    "test:engine": "node --test \"tests/unit/*.test.js\" \"tests/scenario/*.test.js\"",
+    "validate": "node validation/run.js",
     "serve": "python3 -m http.server 8000"
   }
 }

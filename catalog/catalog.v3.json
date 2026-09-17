@@ -1,0 +1,2065 @@
+{
+  "schemaVersion": 3,
+  "references": {
+    "nec-310-16": {
+      "title": "NFPA 70 National Electrical Code, Table 310.16 — allowable ampacities of insulated conductors in raceway, cable or earth, 30 °C ambient",
+      "note": "Used as a reference ampacity for conductors bundled in a raceway."
+    },
+    "nec-310-17": {
+      "title": "NFPA 70 National Electrical Code, Table 310.17 — allowable ampacities of single insulated conductors in free air, 30 °C ambient",
+      "note": "This is the geometry the engine models: one conductor, still air. Validation compares the solved conductor temperature against the insulation rating at this current."
+    },
+    "nec-ch9-t8": {
+      "title": "NFPA 70 National Electrical Code, Chapter 9 Table 8 — conductor properties (area, DC resistance of uncoated copper)",
+      "note": "Source of conductor cross-sectional areas."
+    },
+    "nec-ch9-t5": {
+      "title": "NFPA 70 National Electrical Code, Chapter 9 Table 5 — dimensions of insulated conductors (THHN/THWN-2)",
+      "note": "Source of insulation outer diameters."
+    },
+    "crc-handbook": {
+      "title": "CRC Handbook of Chemistry and Physics, 97th ed. — electrical resistivity and temperature coefficients of the elements",
+      "note": "Copper, aluminium and tungsten resistivity and density."
+    },
+    "crc-tungsten": {
+      "title": "CRC Handbook of Chemistry and Physics — resistivity of tungsten from 300 K to 3000 K; Y. S. Touloukian, Thermophysical Properties of Matter, Vol. 1",
+      "note": "Power-law exponent 1.2 reproduces the tabulated ratio rho(2800 K)/rho(293 K) ~ 15 to within a few percent."
+    },
+    "incropera": {
+      "title": "Incropera, DeWitt, Bergman & Lavine, Fundamentals of Heat and Mass Transfer, 6th ed. — Table A.4 (air properties), Ch. 7 (external forced convection), Ch. 9 (free convection)",
+      "note": "Air transport properties at 300 K and their temperature trends; flat-plate forced convection correlation."
+    },
+    "churchill-chu": {
+      "title": "Churchill & Chu, 'Correlating equations for laminar and turbulent free convection from a vertical plate' and '... from a horizontal cylinder', Int. J. Heat Mass Transfer 18 (1975)",
+      "note": "Natural convection Nusselt correlations used for every ambient surface."
+    },
+    "si-constants": {
+      "title": "BIPM SI Brochure, 9th ed. (2019) and CODATA 2018 recommended values",
+      "note": "Stefan-Boltzmann constant, Boltzmann constant, elementary charge. Solar constant 1361 W/m2 per Kopp & Lean (2011)."
+    },
+    "vlach-singhal": {
+      "title": "Vlach & Singhal, Computer Methods for Circuit Analysis and Design, 2nd ed. — modified nodal analysis, damped Newton, GMIN",
+      "note": "Solver formulation, convergence criteria and the node-to-ground leakage convention."
+    },
+    "victron-phoenix-1200": {
+      "title": "Victron Energy Phoenix Inverter 12/1200 VE.Direct datasheet",
+      "note": "1000 W continuous at 25 C, 2400 W peak, 8 W no-load, 92 % peak efficiency, 9.3 V shutdown / 10.9 V restart, 17 V high-voltage cutoff."
+    },
+    "victron-multiplus": {
+      "title": "Victron Energy MultiPlus 48/3000/35 datasheet",
+      "note": "2400 W continuous at 25 C, 6000 W peak, 20 W no-load, 95 % peak efficiency, 37.2 V shutdown / 43.2 V restart, 66 V high-voltage cutoff, output derates above 25 C."
+    },
+    "victron-mppt-100-50": {
+      "title": "Victron Energy SmartSolar MPPT 100/50 datasheet",
+      "note": "50 A maximum charge current, 100 V maximum PV open-circuit voltage, 98 % peak efficiency, ~10 mA self consumption, temperature-compensated absorption/float."
+    },
+    "battleborn-bb10012": {
+      "title": "Battle Born Batteries BB10012 (12.8 V 100 Ah LiFePO4) specification sheet",
+      "note": "100 A continuous discharge, 50 A recommended charge, 14.6 V absorb / 13.6 V float, 31 lb (14.1 kg), BMS cutoffs."
+    },
+    "lfp-ocv-typical": {
+      "title": "Composite LiFePO4 cell open-circuit-voltage curve from EVE LF105 and A123 AHR32113 datasheet discharge curves at C/20, 25 C",
+      "note": "Per-cell OCV against depth of discharge; multiplied by the series cell count."
+    },
+    "lfp-internal-resistance": {
+      "title": "EVE LF105 cell datasheet AC/DC internal resistance and its temperature dependence; Jaguemont et al., 'A comprehensive review of lithium-ion batteries used in hybrid and electric vehicles at cold temperatures', Applied Energy 164 (2016)",
+      "note": "Resistance multipliers against temperature and state of charge."
+    },
+    "lfp-cycle-life": {
+      "title": "Battle Born BB10012 cycle-life statement (3000-5000 cycles to 80 % capacity at 100 % DoD)",
+      "note": "Capacity fade per equivalent full cycle."
+    },
+    "lfp-thermal-runaway": {
+      "title": "Feng et al., 'Thermal runaway mechanism of lithium ion battery for electric vehicles: a review', Energy Storage Materials 10 (2018); Golubkov et al., RSC Adv. 4 (2014) for LiFePO4 accelerating-rate-calorimetry onset and heat release",
+      "note": "LFP self-heating onset near 200 C and total heat release near 500 kJ/kg. The pre-exponential factor is an order-of-magnitude fit to the reported self-heating rate at onset, not to any simulation output."
+    },
+    "plett-bms": {
+      "title": "Plett, Battery Management Systems, Volume 1: Battery Modeling — coulomb counting, coulombic efficiency, equivalent-circuit models",
+      "note": "State-of-charge integration and the OCV + I*R terminal model."
+    },
+    "canadian-solar-cs6k-300ms": {
+      "title": "Canadian Solar CS6K-300MS (60-cell monocrystalline) datasheet",
+      "note": "300 W, Vmp 32.5 V, Imp 9.24 A, Voc 39.7 V, Isc 9.83 A, NOCT 43 C, temperature coefficients, 1650 x 992 x 35 mm, 18.2 kg, three bypass diodes."
+    },
+    "renogy-100d": {
+      "title": "Renogy 100 W 12 V monocrystalline panel (RNG-100D) datasheet",
+      "note": "100 W, Vmp 20.4 V, Imp 4.91 A, Voc 24.3 V, Isc 5.21 A, 36 cells, 1130 x 505 x 35 mm, 6.4 kg."
+    },
+    "desoto-2006": {
+      "title": "De Soto, Klein & Beckman, 'Improvement and validation of a model for photovoltaic array performance', Solar Energy 80 (2006)",
+      "note": "Five-parameter single-diode model and the temperature dependence of I0 and Iph. Silicon band gap 1.121 eV."
+    },
+    "villalva-2009": {
+      "title": "Villalva, Gazoli & Ruppert, 'Comprehensive approach to modeling and simulation of photovoltaic arrays', IEEE Trans. Power Electronics 24 (2009)",
+      "note": "Iterative extraction of Rs and Rsh from datasheet values so the model MPP equals the datasheet MPP."
+    },
+    "faiman-2008": {
+      "title": "Faiman, 'Assessing the outdoor operating temperature of photovoltaic modules', Progress in Photovoltaics 16 (2008)",
+      "note": "T_cell = T_amb + G / (U0 + U1 * wind)."
+    },
+    "koehl-2011": {
+      "title": "Koehl, Heck, Wiesmeier & Wirth, 'Modeling of the nominal operating cell temperature based on outdoor weathering', Solar Energy Materials and Solar Cells 95 (2011)",
+      "note": "U0 = 25.0 W/m2K, U1 = 6.84 W/m3sK for glass/backsheet modules on an open rack."
+    },
+    "esram-chapman": {
+      "title": "Esram & Chapman, 'Comparison of photovoltaic array maximum power point tracking techniques', IEEE Trans. Energy Conversion 22 (2007)",
+      "note": "Perturb-and-observe step sizes and tracking behaviour."
+    },
+    "bird-hulstrom-1981": {
+      "title": "Bird & Hulstrom, 'A simplified clear sky model for direct and diffuse insolation on horizontal surfaces', SERI/TR-642-761 (1981)",
+      "note": "Broadband transmittance clear-sky model for DNI, DHI and GHI."
+    },
+    "duffie-beckman": {
+      "title": "Duffie & Beckman, Solar Engineering of Thermal Processes, 4th ed. — Ch. 1 (extraterrestrial radiation), Ch. 2 (Hay-Davies transposition, air mass)",
+      "note": "Plane-of-array transposition and the eccentricity correction."
+    },
+    "noaa-solar": {
+      "title": "NOAA Global Monitoring Laboratory solar calculator, after Meeus, Astronomical Algorithms (low-precision equations)",
+      "note": "Solar declination, equation of time, hour angle, elevation and azimuth."
+    },
+    "pvwatts-v5": {
+      "title": "Dobos, 'PVWatts Version 5 Manual', NREL/TP-6A20-62641 (2014)",
+      "note": "System loss breakdown, inverter model shape, and the annual-yield reference figures used in validation."
+    },
+    "nrel-denver-yield": {
+      "title": "NREL PVWatts v6 run for Denver, CO (39.74 N, 104.98 W), 1 kWdc fixed open rack, 40 degree tilt, 180 degree azimuth, 14 % system losses",
+      "note": "Annual specific yield near 1650 kWh/kWdc. Recorded here as the comparison figure for validation/cases/dailyYield.js; the tolerance band is wide because the engine uses a clear-sky model with a synthetic cloud series rather than a TMY file."
+    },
+    "anl-fuse-curve": {
+      "title": "Blue Sea Systems / Littelfuse ANL-series time-current characteristic curves",
+      "note": "Digitised points at 1.35x, 2x, 3x, 5x and 10x rated current."
+    },
+    "atc-fuse-curve": {
+      "title": "Littelfuse ATO/ATC blade fuse time-current characteristic curves",
+      "note": "Digitised points at 1.35x, 2x, 3x, 5x and 10x rated current."
+    },
+    "ul489": {
+      "title": "UL 489 calibration requirements for moulded-case circuit breakers and the Square D QO series time-current curves",
+      "note": "Must-hold at 100 %, must-trip within one hour at 135 %, plus the published thermal band and instantaneous magnetic region."
+    },
+    "bluesea-187": {
+      "title": "Blue Sea Systems 187-series thermal DC circuit breaker time-current curve",
+      "note": "Panel-mount DC breaker used for battery and controller branches."
+    },
+    "bluesea-9001": {
+      "title": "Blue Sea Systems m-Series 9001 battery switch and 2105 busbar specifications",
+      "note": "300 A make-and-break rating, contact resistance, and busbar rating."
+    },
+    "ge-lamp-handbook": {
+      "title": "GE Lighting, Incandescent Lamps (TP-110) and Lamp and Ballast Product Catalog",
+      "note": "Filament colour temperature near 2700 K for a 100 W 120 V general-service lamp, cold-to-hot resistance ratio near 15, and the spectral split between visible transmission and infrared absorption in soda-lime glass."
+    },
+    "energystar-fridge": {
+      "title": "ENERGY STAR certified residential refrigerator product data and the DOE test procedure (10 CFR 430 subpart B appendix A)",
+      "note": "Compressor input power, run-time fraction and locked-rotor inrush multiple for a small top-freezer unit."
+    },
+    "nichrome-properties": {
+      "title": "Kanthal / Sandvik Nikrothal 80 (Ni80Cr20) resistance alloy datasheet",
+      "note": "Resistivity, temperature coefficient and density of the heating element alloy."
+    },
+    "matweb-materials": {
+      "title": "MatWeb material property data for soda-lime glass, ABS, rigid PVC, mild steel, 6061 aluminium and borosilicate glass",
+      "note": "Density, specific heat, thermal conductivity and emissivity of enclosure and insulation materials."
+    },
+    "pvc-ignition": {
+      "title": "Babrauskas, Ignition Handbook (2003) — auto-ignition temperature of rigid and plasticised PVC; NFPA Fire Protection Handbook",
+      "note": "PVC softens near 105 C, chars near 250 C and auto-ignites near 450 C. Heat of combustion near 20 MJ/kg."
+    },
+    "secop-bd35f": {
+      "title": "Secop (formerly Danfoss) BD35F 12/24 V DC compressor technical data and Vitrifrigo/Isotherm 12 V fridge product data",
+      "note": "12 V DC variable-speed compressor, 45 W typical running input at 2000 rpm, 10.4 V low-voltage cut-out with a 11.7 V restart, locked-rotor current about 5 times running current for under half a second."
+    },
+    "shurflo-4008": {
+      "title": "Pentair Shurflo 4008-101-E65 12 V DC diaphragm pump datasheet",
+      "note": "3.0 gpm at 45 psi, 7.5 A at 12 V nominal, internal bypass so input power is nearly independent of head."
+    },
+    "dc-immersion-heater": {
+      "title": "Kanthal Nikrothal 80 element data (ref:nichrome-properties) applied to a 12 V DC immersion heating element",
+      "note": "A bare resistance element has no electronics, so its current is set only by the alloy's resistivity at temperature. Used as the reference resistive DC load."
+    }
+  },
+  "simulation": {
+    "ambientTemperatureC": 20,
+    "ambientTemperatureCSource": "assumption:default indoor ambient; overridden by the environment model or the UI",
+    "metersPerGridSpace": 0.1,
+    "metersPerGridSpaceSource": "assumption:editor scale, one 24 px grid square is 10 cm of conductor",
+    "solver": {
+      "source": "assumption:numerical tolerances chosen well below any physically meaningful resolution, per ref:vlach-singhal",
+      "gminSiemens": 1e-12,
+      "voltageAbsToleranceVolts": 1e-9,
+      "voltageRelTolerance": 1e-9,
+      "currentAbsToleranceAmps": 1e-10,
+      "maxNewtonIterations": 200,
+      "lineSearchSteps": 12,
+      "modeIterationLimit": 40
+    },
+    "integrator": {
+      "source": "assumption:step-size limits chosen so the fastest modelled state changes by a small fraction per step",
+      "minStepSeconds": 1e-5,
+      "maxStepSeconds": 300,
+      "initialStepSeconds": 1,
+      "maxTemperatureRisePerStepC": 2,
+      "maxStateOfChargeChangePerStep": 0.002,
+      "maxDamageChangePerStep": 0.05,
+      "stepGrow": 1.6,
+      "stepShrink": 0.35,
+      "eventToleranceSeconds": 1e-4,
+      "maxEventBisections": 60
+    },
+    "conservation": {
+      "source": "assumption:relative tolerance for the per-step energy and charge balance checks",
+      "relativeTolerance": 1e-6,
+      "absoluteToleranceWatts": 1e-9
+    },
+    "site": {
+      "source": "ref:nrel-denver-yield",
+      "latitudeDeg": 39.74,
+      "longitudeDeg": -104.98,
+      "timeZoneHours": -7,
+      "altitudeM": 1609,
+      "groundAlbedo": 0.2,
+      "arrayTiltDeg": 40,
+      "arrayAzimuthDeg": 180,
+      "arrayOrientationSource": "ref:nrel-denver-yield fixed open rack at 40 degree tilt facing due south; individual panels may override it"
+    },
+    "atmosphere": {
+      "source": "ref:bird-hulstrom-1981",
+      "seaLevelPressurePa": 101325,
+      "ozoneCm": 0.3,
+      "precipitableWaterCm": 1.0,
+      "aerosolOpticalDepth380": 0.15,
+      "aerosolOpticalDepth500": 0.1,
+      "forwardScatteringFraction": 0.85,
+      "aerosolAbsorptionFactor": 0.1
+    },
+    "fire": {
+      "source": "estimate:free-burning plastic mass-loss rate of 0.02 kg/m2s and a 0.3 radiative fraction are the mid-range values of the SFPE Handbook of Fire Protection Engineering for charring polymers; the flame radius is the geometric reach used for spread between adjacent devices",
+      "massLossRateKgPerM2S": 0.02,
+      "radiativeFraction": 0.3,
+      "flameRadiusM": 0.15,
+      "flameTemperatureC": 900
+    },
+    "weather": {
+      "source": "assumption:synthetic but deterministic cloud and ambient series; shape follows ref:pvwatts-v5",
+      "seed": 20240617,
+      "cloudPeriodHours": 3.5,
+      "cloudMeanClearness": 0.78,
+      "cloudAmplitude": 0.35,
+      "windSpeedMPerS": 1.5,
+      "dailyTemperatureMinC": 8,
+      "dailyTemperatureMaxC": 26,
+      "temperatureMaxHour": 15,
+      "temperatureMinHour": 5
+    }
+  },
+  "materials": {
+    "copper": {
+      "source": "ref:crc-handbook",
+      "densityKgPerM3": 8960,
+      "specificHeatJPerKgC": 385,
+      "thermalConductivityWPerMK": 401,
+      "emissivity": 0.6,
+      "resistivityOhmMeters": 1.724e-8,
+      "resistivityReferenceTemperatureC": 20,
+      "resistivityTempCoefficientPerC": 0.00393,
+      "meltingPointC": 1085,
+      "emissivitySource": "estimate:oxidised copper surface, 0.6; polished copper would be 0.05 and is not representative of installed conductors"
+    },
+    "aluminium": {
+      "source": "ref:crc-handbook",
+      "densityKgPerM3": 2700,
+      "specificHeatJPerKgC": 900,
+      "thermalConductivityWPerMK": 205,
+      "emissivity": 0.3,
+      "resistivityOhmMeters": 2.65e-8,
+      "resistivityReferenceTemperatureC": 20,
+      "resistivityTempCoefficientPerC": 0.00403,
+      "meltingPointC": 660
+    },
+    "tungsten": {
+      "source": "ref:crc-tungsten",
+      "densityKgPerM3": 19300,
+      "specificHeatJPerKgC": 134,
+      "thermalConductivityWPerMK": 174,
+      "emissivity": 0.35,
+      "resistivityOhmMeters": 5.6e-8,
+      "resistivityReferenceTemperatureC": 20,
+      "resistivityTempExponent": 1.2,
+      "meltingPointC": 3422,
+      "emissivitySource": "ref:crc-tungsten total hemispherical emissivity of tungsten near 2800 K"
+    },
+    "nichrome": {
+      "source": "ref:nichrome-properties",
+      "densityKgPerM3": 8300,
+      "specificHeatJPerKgC": 450,
+      "thermalConductivityWPerMK": 15,
+      "emissivity": 0.7,
+      "resistivityOhmMeters": 1.09e-6,
+      "resistivityReferenceTemperatureC": 20,
+      "resistivityTempCoefficientPerC": 0.0001,
+      "meltingPointC": 1400
+    },
+    "soda-lime-glass": {
+      "source": "ref:matweb-materials",
+      "densityKgPerM3": 2500,
+      "specificHeatJPerKgC": 840,
+      "thermalConductivityWPerMK": 1.0,
+      "emissivity": 0.9,
+      "softeningTemperatureC": 700,
+      "infraredAbsorptance": 0.15,
+      "infraredAbsorptanceSource": "ref:ge-lamp-handbook fraction of filament radiation absorbed by the envelope; the visible and near-infrared balance is transmitted"
+    },
+    "abs-plastic": {
+      "source": "ref:matweb-materials",
+      "densityKgPerM3": 1040,
+      "specificHeatJPerKgC": 1400,
+      "thermalConductivityWPerMK": 0.19,
+      "emissivity": 0.9,
+      "softeningTemperatureC": 100,
+      "ignitionTemperatureC": 416,
+      "heatOfCombustionJPerKg": 3.6e7,
+      "ignitionSource": "ref:pvc-ignition companion data for ABS"
+    },
+    "pvc-insulation": {
+      "source": "ref:matweb-materials",
+      "densityKgPerM3": 1380,
+      "specificHeatJPerKgC": 1000,
+      "thermalConductivityWPerMK": 0.17,
+      "emissivity": 0.92,
+      "softeningTemperatureC": 105,
+      "charTemperatureC": 250,
+      "ignitionTemperatureC": 450,
+      "heatOfCombustionJPerKg": 2.0e7,
+      "ignitionSource": "ref:pvc-ignition"
+    },
+    "mild-steel": {
+      "source": "ref:matweb-materials",
+      "densityKgPerM3": 7850,
+      "specificHeatJPerKgC": 480,
+      "thermalConductivityWPerMK": 50,
+      "emissivity": 0.8,
+      "meltingPointC": 1425
+    },
+    "silicon-module": {
+      "source": "ref:matweb-materials",
+      "densityKgPerM3": 2330,
+      "specificHeatJPerKgC": 700,
+      "thermalConductivityWPerMK": 148,
+      "emissivity": 0.9,
+      "meltingPointC": 1414
+    },
+    "lifepo4-cell": {
+      "source": "ref:lfp-thermal-runaway",
+      "densityKgPerM3": 2200,
+      "specificHeatJPerKgC": 1100,
+      "thermalConductivityWPerMK": 1.5,
+      "emissivity": 0.9,
+      "runawayOnsetTemperatureC": 200,
+      "runawayActivationEnergyJPerMol": 1.2e5,
+      "runawayPreExponentialPerS": 7.1e7,
+      "runawayHeatJPerKg": 5.0e5,
+      "ventTemperatureC": 250
+    },
+    "air": {
+      "source": "ref:incropera",
+      "referenceTemperatureK": 300,
+      "thermalConductivityWPerMK": 0.0263,
+      "kinematicViscosityM2PerS": 1.589e-5,
+      "prandtl": 0.707,
+      "densityKgPerM3": 1.1614,
+      "specificHeatJPerKgC": 1007,
+      "conductivityTempExponent": 0.83,
+      "viscosityTempExponent": 1.75,
+      "exponentSource": "derived:power-law fits to ref:incropera Table A.4 between 250 K and 800 K"
+    }
+  },
+  "conductors": {
+    "gauges": {
+      "14": {
+        "source": "ref:nec-ch9-t8",
+        "areaMm2": 2.08,
+        "conductorDiameterMm": 1.63,
+        "ampacityFreeAir60CAmps": 25,
+        "ampacityFreeAir75CAmps": 30,
+        "ampacityRaceway75CAmps": 20,
+        "ampacitySource": "ref:nec-310-17"
+      },
+      "12": {
+        "source": "ref:nec-ch9-t8",
+        "areaMm2": 3.31,
+        "conductorDiameterMm": 2.05,
+        "ampacityFreeAir60CAmps": 30,
+        "ampacityFreeAir75CAmps": 35,
+        "ampacityRaceway75CAmps": 25,
+        "ampacitySource": "ref:nec-310-17"
+      },
+      "10": {
+        "source": "ref:nec-ch9-t8",
+        "areaMm2": 5.26,
+        "conductorDiameterMm": 2.59,
+        "ampacityFreeAir60CAmps": 40,
+        "ampacityFreeAir75CAmps": 50,
+        "ampacityRaceway75CAmps": 35,
+        "ampacitySource": "ref:nec-310-17"
+      },
+      "8": {
+        "source": "ref:nec-ch9-t8",
+        "areaMm2": 8.37,
+        "conductorDiameterMm": 3.26,
+        "ampacityFreeAir60CAmps": 60,
+        "ampacityFreeAir75CAmps": 70,
+        "ampacityRaceway75CAmps": 50,
+        "ampacitySource": "ref:nec-310-17"
+      },
+      "6": {
+        "source": "ref:nec-ch9-t8",
+        "areaMm2": 13.3,
+        "conductorDiameterMm": 4.12,
+        "ampacityFreeAir60CAmps": 80,
+        "ampacityFreeAir75CAmps": 95,
+        "ampacityRaceway75CAmps": 65,
+        "ampacitySource": "ref:nec-310-17"
+      },
+      "4": {
+        "source": "ref:nec-ch9-t8",
+        "areaMm2": 21.2,
+        "conductorDiameterMm": 5.19,
+        "ampacityFreeAir60CAmps": 105,
+        "ampacityFreeAir75CAmps": 125,
+        "ampacityRaceway75CAmps": 85,
+        "ampacitySource": "ref:nec-310-17"
+      },
+      "2": {
+        "source": "ref:nec-ch9-t8",
+        "areaMm2": 33.6,
+        "conductorDiameterMm": 6.54,
+        "ampacityFreeAir60CAmps": 140,
+        "ampacityFreeAir75CAmps": 170,
+        "ampacityRaceway75CAmps": 115,
+        "ampacitySource": "ref:nec-310-17"
+      },
+      "1": {
+        "source": "ref:nec-ch9-t8",
+        "areaMm2": 42.4,
+        "conductorDiameterMm": 7.35,
+        "ampacityFreeAir60CAmps": 165,
+        "ampacityFreeAir75CAmps": 195,
+        "ampacityRaceway75CAmps": 130,
+        "ampacitySource": "ref:nec-310-17"
+      },
+      "1/0": {
+        "source": "ref:nec-ch9-t8",
+        "areaMm2": 53.5,
+        "conductorDiameterMm": 8.25,
+        "ampacityFreeAir60CAmps": 195,
+        "ampacityFreeAir75CAmps": 230,
+        "ampacityRaceway75CAmps": 150,
+        "ampacitySource": "ref:nec-310-17"
+      },
+      "2/0": {
+        "source": "ref:nec-ch9-t8",
+        "areaMm2": 67.4,
+        "conductorDiameterMm": 9.27,
+        "ampacityFreeAir60CAmps": 225,
+        "ampacityFreeAir75CAmps": 265,
+        "ampacityRaceway75CAmps": 175,
+        "ampacitySource": "ref:nec-310-17"
+      },
+      "4/0": {
+        "source": "ref:nec-ch9-t8",
+        "areaMm2": 107,
+        "conductorDiameterMm": 11.68,
+        "ampacityFreeAir60CAmps": 315,
+        "ampacityFreeAir75CAmps": 360,
+        "ampacityRaceway75CAmps": 230,
+        "ampacitySource": "ref:nec-310-17"
+      }
+    }
+  },
+  "wires": [
+    {
+      "id": "wire-cu-14awg-thhn",
+      "name": "14 AWG THHN copper",
+      "gauge": "14",
+      "conductorMaterial": "copper",
+      "insulationMaterial": "pvc-insulation",
+      "specifications": {
+        "Gauge": "14 AWG",
+        "Conductor": "2.08 mm² copper",
+        "Insulation": "THHN, 90 °C",
+        "Free-air ampacity": "30 A"
+      },
+      "model": {
+        "source": "ref:nec-ch9-t5",
+        "insulationOuterDiameterMm": 2.79,
+        "insulationRatingC": 90
+      }
+    },
+    {
+      "id": "wire-cu-12awg-thhn",
+      "name": "12 AWG THHN copper",
+      "gauge": "12",
+      "conductorMaterial": "copper",
+      "insulationMaterial": "pvc-insulation",
+      "specifications": {
+        "Gauge": "12 AWG",
+        "Conductor": "3.31 mm² copper",
+        "Insulation": "THHN, 90 °C",
+        "Free-air ampacity": "35 A"
+      },
+      "model": {
+        "source": "ref:nec-ch9-t5",
+        "insulationOuterDiameterMm": 3.30,
+        "insulationRatingC": 90
+      }
+    },
+    {
+      "id": "wire-cu-10awg-thhn",
+      "name": "10 AWG THHN copper",
+      "gauge": "10",
+      "conductorMaterial": "copper",
+      "insulationMaterial": "pvc-insulation",
+      "specifications": {
+        "Gauge": "10 AWG",
+        "Conductor": "5.26 mm² copper",
+        "Insulation": "THHN, 90 °C",
+        "Free-air ampacity": "50 A"
+      },
+      "model": {
+        "source": "ref:nec-ch9-t5",
+        "insulationOuterDiameterMm": 4.17,
+        "insulationRatingC": 90
+      }
+    },
+    {
+      "id": "wire-cu-6awg-thhn",
+      "name": "6 AWG THHN copper",
+      "gauge": "6",
+      "conductorMaterial": "copper",
+      "insulationMaterial": "pvc-insulation",
+      "specifications": {
+        "Gauge": "6 AWG",
+        "Conductor": "13.3 mm² copper",
+        "Insulation": "THHN, 90 °C",
+        "Free-air ampacity": "95 A"
+      },
+      "model": {
+        "source": "ref:nec-ch9-t5",
+        "insulationOuterDiameterMm": 6.45,
+        "insulationRatingC": 90
+      }
+    },
+    {
+      "id": "wire-cu-2awg-thhn",
+      "name": "2 AWG THHN copper",
+      "gauge": "2",
+      "conductorMaterial": "copper",
+      "insulationMaterial": "pvc-insulation",
+      "specifications": {
+        "Gauge": "2 AWG",
+        "Conductor": "33.6 mm² copper",
+        "Insulation": "THHN, 90 °C",
+        "Free-air ampacity": "170 A"
+      },
+      "model": {
+        "source": "ref:nec-ch9-t5",
+        "insulationOuterDiameterMm": 9.91,
+        "insulationRatingC": 90
+      }
+    },
+    {
+      "id": "wire-cu-4-0awg-thhn",
+      "name": "4/0 AWG THHN copper",
+      "gauge": "4/0",
+      "conductorMaterial": "copper",
+      "insulationMaterial": "pvc-insulation",
+      "specifications": {
+        "Gauge": "4/0 AWG",
+        "Conductor": "107 mm² copper",
+        "Insulation": "THHN, 90 °C",
+        "Free-air ampacity": "360 A"
+      },
+      "model": {
+        "source": "ref:nec-ch9-t5",
+        "insulationOuterDiameterMm": 16.36,
+        "insulationRatingC": 90
+      }
+    }
+  ],
+  "components": [
+    {
+      "id": "battery-lifepo4-12v-100ah",
+      "group": "battery",
+      "name": "12 V 100 Ah LiFePO4",
+      "description": "Four LiFePO4 cells in series with an integrated BMS contactor.",
+      "gridSize": { "width": 5, "height": 3 },
+      "specifications": {
+        "Nominal voltage": "12.8 V",
+        "Capacity": "100 Ah / 1,280 Wh",
+        "Continuous discharge": "100 A",
+        "Recommended charge": "50 A",
+        "Internal resistance": "10 mΩ",
+        "Mass": "14.1 kg"
+      },
+      "terminals": [
+        { "id": "positive", "label": "+", "role": "dc-positive", "domain": "dc", "edge": "right", "offset": 0.3 },
+        { "id": "negative", "label": "−", "role": "dc-negative", "domain": "dc", "edge": "right", "offset": 0.7, "reference": true }
+      ],
+      "model": {
+        "type": "battery",
+        "source": "ref:battleborn-bb10012",
+        "electrical": {
+          "cellsInSeries": 4,
+          "nominalVoltage": 12.8,
+          "capacityAh": 100,
+          "startingStateOfCharge": 0.8,
+          "startingStateOfChargeSource": "assumption:new layouts start at 80 % so both charge and discharge are reachable",
+          "internalResistanceOhms": 0.010,
+          "internalResistanceSource": "ref:lfp-internal-resistance",
+          "coulombicEfficiency": 0.99,
+          "openCircuitVoltageCurve": [
+            { "stateOfCharge": 0.0, "voltage": 10.0 },
+            { "stateOfCharge": 0.05, "voltage": 12.4 },
+            { "stateOfCharge": 0.1, "voltage": 12.8 },
+            { "stateOfCharge": 0.2, "voltage": 13.0 },
+            { "stateOfCharge": 0.4, "voltage": 13.1 },
+            { "stateOfCharge": 0.6, "voltage": 13.18 },
+            { "stateOfCharge": 0.8, "voltage": 13.28 },
+            { "stateOfCharge": 0.9, "voltage": 13.36 },
+            { "stateOfCharge": 0.95, "voltage": 13.52 },
+            { "stateOfCharge": 1.0, "voltage": 14.0 }
+          ],
+          "openCircuitVoltageCurveSource": "ref:lfp-ocv-typical",
+          "resistanceTemperatureFactors": [
+            { "temperatureC": -20, "factor": 4.0 },
+            { "temperatureC": 0, "factor": 2.0 },
+            { "temperatureC": 25, "factor": 1.0 },
+            { "temperatureC": 45, "factor": 0.85 }
+          ],
+          "resistanceStateOfChargeFactors": [
+            { "stateOfCharge": 0.0, "factor": 1.6 },
+            { "stateOfCharge": 0.2, "factor": 1.1 },
+            { "stateOfCharge": 0.5, "factor": 1.0 },
+            { "stateOfCharge": 0.9, "factor": 1.0 },
+            { "stateOfCharge": 1.0, "factor": 1.2 }
+          ],
+          "resistanceFactorSource": "ref:lfp-internal-resistance",
+          "capacityTemperatureFactors": [
+            { "temperatureC": -20, "factor": 0.7 },
+            { "temperatureC": 0, "factor": 0.85 },
+            { "temperatureC": 25, "factor": 1.0 },
+            { "temperatureC": 45, "factor": 1.02 }
+          ],
+          "capacityFadePerEquivalentCycle": 6.7e-5,
+          "capacityFadeSource": "derived:20 % capacity loss over 3000 equivalent full cycles, ref:lfp-cycle-life",
+          "contactorResistanceOhms": 0.002,
+          "contactorResistanceSource": "estimate:BMS MOSFET bank on-state resistance for a 100 A drop-in pack"
+        },
+        "limits": {
+          "source": "ref:battleborn-bb10012",
+          "overVoltageDisconnect": 14.6,
+          "overVoltageReconnect": 13.8,
+          "underVoltageDisconnect": 10.0,
+          "underVoltageReconnect": 12.0,
+          "chargeCurrentLimitAmps": 50,
+          "dischargeCurrentLimitAmps": 100,
+          "overCurrentTripCurve": [
+            { "multiple": 1.05, "seconds": 600 },
+            { "multiple": 1.5, "seconds": 10 },
+            { "multiple": 2.0, "seconds": 2 },
+            { "multiple": 5.0, "seconds": 0.05 }
+          ],
+          "overCurrentTripCurveSource": "estimate:BMS overcurrent response inferred from the datasheet continuous and surge ratings",
+          "highTemperatureDisconnectC": 60,
+          "highTemperatureReconnectC": 50,
+          "reconnectDelaySeconds": 60,
+          "reconnectDelaySource": "estimate:BMS lockout before reclosing the contactor, so a sagging pack cannot chatter",
+          "chargeLowTemperatureDisconnectC": 0,
+          "damageTemperatureC": 90,
+          "damageTemperatureSource": "ref:lfp-thermal-runaway separator melt begins well below the self-heating onset"
+        },
+        "thermal": {
+          "nodes": {
+            "cell": { "material": "lifepo4-cell", "massKg": 10.0, "runaway": true },
+            "case": {
+              "material": "abs-plastic",
+              "massKg": 4.1,
+              "surface": { "geometry": "verticalPlate", "areaM2": 0.270, "characteristicLengthM": 0.214 }
+            }
+          },
+          "links": [{ "from": "cell", "to": "case", "conductanceWPerK": 5.0 }],
+          "heatNode": "cell",
+          "source": "estimate:case 328 x 172 x 214 mm from the datasheet outline, exposed area excludes the mounting face; cell mass is the datasheet mass less an estimated 4.1 kg of case, and the internal conductance is a lumped estimate for potted prismatic cells"
+        }
+      }
+    },
+    {
+      "id": "battery-lifepo4-48v-100ah",
+      "group": "battery",
+      "name": "48 V 100 Ah LiFePO4 rack",
+      "description": "Sixteen LiFePO4 cells in series in a rack enclosure with a BMS contactor.",
+      "gridSize": { "width": 5, "height": 3 },
+      "specifications": {
+        "Nominal voltage": "51.2 V",
+        "Capacity": "100 Ah / 5,120 Wh",
+        "Continuous discharge": "100 A",
+        "Recommended charge": "50 A",
+        "Internal resistance": "30 mΩ",
+        "Mass": "45 kg"
+      },
+      "terminals": [
+        { "id": "positive", "label": "+", "role": "dc-positive", "domain": "dc", "edge": "right", "offset": 0.3 },
+        { "id": "negative", "label": "−", "role": "dc-negative", "domain": "dc", "edge": "right", "offset": 0.7, "reference": true }
+      ],
+      "model": {
+        "type": "battery",
+        "source": "ref:battleborn-bb10012",
+        "electrical": {
+          "cellsInSeries": 16,
+          "nominalVoltage": 51.2,
+          "capacityAh": 100,
+          "startingStateOfCharge": 0.8,
+          "startingStateOfChargeSource": "assumption:new layouts start at 80 %",
+          "internalResistanceOhms": 0.030,
+          "internalResistanceSource": "derived:four times the 4S pack resistance for four times the series cell count, ref:lfp-internal-resistance",
+          "coulombicEfficiency": 0.99,
+          "openCircuitVoltageCurve": [
+            { "stateOfCharge": 0.0, "voltage": 40.0 },
+            { "stateOfCharge": 0.05, "voltage": 49.6 },
+            { "stateOfCharge": 0.1, "voltage": 51.2 },
+            { "stateOfCharge": 0.2, "voltage": 52.0 },
+            { "stateOfCharge": 0.4, "voltage": 52.4 },
+            { "stateOfCharge": 0.6, "voltage": 52.72 },
+            { "stateOfCharge": 0.8, "voltage": 53.12 },
+            { "stateOfCharge": 0.9, "voltage": 53.44 },
+            { "stateOfCharge": 0.95, "voltage": 54.08 },
+            { "stateOfCharge": 1.0, "voltage": 56.0 }
+          ],
+          "openCircuitVoltageCurveSource": "ref:lfp-ocv-typical",
+          "resistanceTemperatureFactors": [
+            { "temperatureC": -20, "factor": 4.0 },
+            { "temperatureC": 0, "factor": 2.0 },
+            { "temperatureC": 25, "factor": 1.0 },
+            { "temperatureC": 45, "factor": 0.85 }
+          ],
+          "resistanceStateOfChargeFactors": [
+            { "stateOfCharge": 0.0, "factor": 1.6 },
+            { "stateOfCharge": 0.2, "factor": 1.1 },
+            { "stateOfCharge": 0.5, "factor": 1.0 },
+            { "stateOfCharge": 0.9, "factor": 1.0 },
+            { "stateOfCharge": 1.0, "factor": 1.2 }
+          ],
+          "resistanceFactorSource": "ref:lfp-internal-resistance",
+          "capacityTemperatureFactors": [
+            { "temperatureC": -20, "factor": 0.7 },
+            { "temperatureC": 0, "factor": 0.85 },
+            { "temperatureC": 25, "factor": 1.0 },
+            { "temperatureC": 45, "factor": 1.02 }
+          ],
+          "capacityFadePerEquivalentCycle": 6.7e-5,
+          "capacityFadeSource": "derived:20 % capacity loss over 3000 equivalent full cycles, ref:lfp-cycle-life",
+          "contactorResistanceOhms": 0.002,
+          "contactorResistanceSource": "estimate:BMS MOSFET bank on-state resistance for a 100 A rack pack"
+        },
+        "limits": {
+          "source": "ref:battleborn-bb10012",
+          "overVoltageDisconnect": 58.4,
+          "overVoltageReconnect": 55.2,
+          "underVoltageDisconnect": 40.0,
+          "underVoltageReconnect": 48.0,
+          "chargeCurrentLimitAmps": 50,
+          "dischargeCurrentLimitAmps": 100,
+          "overCurrentTripCurve": [
+            { "multiple": 1.05, "seconds": 600 },
+            { "multiple": 1.5, "seconds": 10 },
+            { "multiple": 2.0, "seconds": 2 },
+            { "multiple": 5.0, "seconds": 0.05 }
+          ],
+          "overCurrentTripCurveSource": "estimate:BMS overcurrent response inferred from the datasheet continuous and surge ratings",
+          "highTemperatureDisconnectC": 60,
+          "highTemperatureReconnectC": 50,
+          "reconnectDelaySeconds": 60,
+          "reconnectDelaySource": "estimate:BMS lockout before reclosing the contactor, so a sagging pack cannot chatter",
+          "chargeLowTemperatureDisconnectC": 0,
+          "damageTemperatureC": 90,
+          "damageTemperatureSource": "ref:lfp-thermal-runaway"
+        },
+        "thermal": {
+          "nodes": {
+            "cell": { "material": "lifepo4-cell", "massKg": 40.0, "runaway": true },
+            "case": {
+              "material": "mild-steel",
+              "massKg": 5.0,
+              "surface": { "geometry": "verticalPlate", "areaM2": 0.536, "characteristicLengthM": 0.42 }
+            }
+          },
+          "links": [{ "from": "cell", "to": "case", "conductanceWPerK": 12.0 }],
+          "heatNode": "cell",
+          "source": "estimate:19 inch rack enclosure 440 x 130 x 420 mm, exposed area excludes the mounting face; conductance scaled from the 4S pack by cell count"
+        }
+      }
+    },
+    {
+      "id": "pv-mono-300w",
+      "group": "pv",
+      "name": "300 W mono PV module",
+      "description": "Sixty-cell monocrystalline module with three bypass diodes.",
+      "gridSize": { "width": 6, "height": 4 },
+      "specifications": {
+        "Rated power": "300 W at STC",
+        "Vmp / Imp": "32.5 V / 9.24 A",
+        "Voc / Isc": "39.7 V / 9.83 A",
+        "Cells": "60 in series, 3 substrings",
+        "Area": "1.64 m²",
+        "Mass": "18.2 kg"
+      },
+      "terminals": [
+        { "id": "positive", "label": "+", "role": "dc-positive", "domain": "dc", "edge": "right", "offset": 0.3 },
+        { "id": "negative", "label": "−", "role": "dc-negative", "domain": "dc", "edge": "right", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "pv",
+        "source": "ref:canadian-solar-cs6k-300ms",
+        "electrical": {
+          "cellsInSeries": 60,
+          "substrings": 3,
+          "shortCircuitCurrentAmps": 9.83,
+          "openCircuitVoltage": 39.7,
+          "maxPowerVoltage": 32.5,
+          "maxPowerCurrentAmps": 9.24,
+          "iscTempCoefficientPercentPerC": 0.05,
+          "vocTempCoefficientPercentPerC": -0.29,
+          "pmpTempCoefficientPercentPerC": -0.39,
+          "diodeIdeality": 1.1,
+          "diodeIdealitySource": "estimate:typical value for monocrystalline silicon, ref:villalva-2009 recommends 1.0-1.5",
+          "bandGapEv": 1.121,
+          "bandGapSource": "ref:desoto-2006",
+          "bypassDiode": {
+            "saturationCurrentAmps": 1e-8,
+            "idealityFactor": 1.5,
+            "seriesResistanceOhms": 0.01,
+            "source": "estimate:junction-box bypass diode, typical PN characteristic"
+          }
+        },
+        "limits": {
+          "source": "ref:canadian-solar-cs6k-300ms",
+          "maxSystemVoltage": 1000,
+          "damageTemperatureC": 150,
+          "damageTemperatureSource": "estimate:EVA encapsulant and backsheet degradation threshold"
+        },
+        "optical": {
+          "source": "ref:canadian-solar-cs6k-300ms",
+          "areaM2": 1.6368,
+          "absorptance": 0.9,
+          "absorptanceSource": "estimate:glass and cell absorptance for an anti-reflective coated module",
+          "faimanU0": 25.0,
+          "faimanU1": 6.84,
+          "faimanSource": "ref:koehl-2011"
+        },
+        "thermal": {
+          "nodes": {
+            "cell": {
+              "material": "silicon-module",
+              "massKg": 18.2,
+              "surface": { "geometry": "faiman", "areaM2": 1.6368 }
+            }
+          },
+          "links": [],
+          "heatNode": "cell",
+          "source": "ref:faiman-2008"
+        }
+      }
+    },
+    {
+      "id": "pv-mono-100w",
+      "group": "pv",
+      "name": "100 W 12 V PV module",
+      "description": "Thirty-six-cell monocrystalline module sized for a 12 volt battery.",
+      "gridSize": { "width": 5, "height": 3 },
+      "specifications": {
+        "Rated power": "100 W at STC",
+        "Vmp / Imp": "20.4 V / 4.91 A",
+        "Voc / Isc": "24.3 V / 5.21 A",
+        "Cells": "36 in series, 2 substrings",
+        "Area": "0.57 m²",
+        "Mass": "6.4 kg"
+      },
+      "terminals": [
+        { "id": "positive", "label": "+", "role": "dc-positive", "domain": "dc", "edge": "right", "offset": 0.3 },
+        { "id": "negative", "label": "−", "role": "dc-negative", "domain": "dc", "edge": "right", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "pv",
+        "source": "ref:renogy-100d",
+        "electrical": {
+          "cellsInSeries": 36,
+          "substrings": 2,
+          "shortCircuitCurrentAmps": 5.21,
+          "openCircuitVoltage": 24.3,
+          "maxPowerVoltage": 20.4,
+          "maxPowerCurrentAmps": 4.91,
+          "iscTempCoefficientPercentPerC": 0.05,
+          "vocTempCoefficientPercentPerC": -0.30,
+          "pmpTempCoefficientPercentPerC": -0.40,
+          "diodeIdeality": 1.1,
+          "diodeIdealitySource": "estimate:typical value for monocrystalline silicon, ref:villalva-2009",
+          "bandGapEv": 1.121,
+          "bandGapSource": "ref:desoto-2006",
+          "bypassDiode": {
+            "saturationCurrentAmps": 1e-8,
+            "idealityFactor": 1.5,
+            "seriesResistanceOhms": 0.01,
+            "source": "estimate:junction-box bypass diode, typical PN characteristic"
+          }
+        },
+        "limits": {
+          "source": "ref:renogy-100d",
+          "maxSystemVoltage": 600,
+          "damageTemperatureC": 150,
+          "damageTemperatureSource": "estimate:EVA encapsulant and backsheet degradation threshold"
+        },
+        "optical": {
+          "source": "ref:renogy-100d",
+          "areaM2": 0.5707,
+          "absorptance": 0.9,
+          "absorptanceSource": "estimate:glass and cell absorptance for an anti-reflective coated module",
+          "faimanU0": 25.0,
+          "faimanU1": 6.84,
+          "faimanSource": "ref:koehl-2011"
+        },
+        "thermal": {
+          "nodes": {
+            "cell": {
+              "material": "silicon-module",
+              "massKg": 6.4,
+              "surface": { "geometry": "faiman", "areaM2": 0.5707 }
+            }
+          },
+          "links": [],
+          "heatNode": "cell",
+          "source": "ref:faiman-2008"
+        }
+      }
+    },
+    {
+      "id": "controller-mppt-50a",
+      "group": "controller",
+      "name": "MPPT 100/50 charge controller",
+      "description": "Maximum-power-point tracking controller, 100 V PV input, 50 A charge.",
+      "gridSize": { "width": 5, "height": 3 },
+      "specifications": {
+        "PV input": "100 V maximum open circuit",
+        "Charge current": "50 A maximum",
+        "Peak efficiency": "98 %",
+        "Self consumption": "0.3 W",
+        "Charge stages": "bulk, absorption, float",
+        "Mass": "3.0 kg"
+      },
+      "terminals": [
+        { "id": "pv-positive", "label": "PV +", "role": "pv-positive", "domain": "dc", "edge": "left", "offset": 0.3 },
+        { "id": "pv-negative", "label": "PV −", "role": "pv-negative", "domain": "dc", "edge": "left", "offset": 0.7 },
+        { "id": "battery-positive", "label": "B +", "role": "battery-positive", "domain": "dc", "edge": "right", "offset": 0.3 },
+        { "id": "battery-negative", "label": "B −", "role": "battery-negative", "domain": "dc", "edge": "right", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "chargeController",
+        "source": "ref:victron-mppt-100-50",
+        "topology": "mppt",
+        "electrical": {
+          "maxInputVoltage": 100,
+          "maxChargeCurrentAmps": 50,
+          "idleDrawWatts": 0.3,
+          "idleDrawSource": "derived:10 mA self consumption at a 12 V battery, ref:victron-mppt-100-50",
+          "efficiencyCurve": [
+            { "loadFraction": 0.1, "efficiency": 0.95 },
+            { "loadFraction": 0.2, "efficiency": 0.965 },
+            { "loadFraction": 0.5, "efficiency": 0.98 },
+            { "loadFraction": 0.75, "efficiency": 0.975 },
+            { "loadFraction": 1.0, "efficiency": 0.97 }
+          ],
+          "efficiencyCurveSource": "ref:victron-mppt-100-50 peak efficiency 98 %; the shape either side of the peak follows the published efficiency graph",
+          "controlResistanceOhms": 0.05,
+          "controlResistanceSource": "estimate:small-signal input regulation stiffness of the tracking loop, chosen far below the array's dynamic resistance",
+          "outputRegulationResistanceOhms": 0.02,
+          "outputRegulationResistanceSource": "estimate:output voltage regulation stiffness during absorption and float",
+          "negativeBondResistanceOhms": 0.0001,
+          "negativeBondSource": "estimate:internal negative bus bond of a non-isolated buck controller",
+          "tracking": {
+            "stepVolts": 0.25,
+            "intervalSeconds": 2,
+            "source": "ref:esram-chapman typical perturb-and-observe step and dwell for a hill-climbing tracker"
+          },
+          "stages": {
+            "absorbVoltagePer12V": 14.4,
+            "floatVoltagePer12V": 13.5,
+            "absorbHoldSeconds": 7200,
+            "tailCurrentFraction": 0.02,
+            "source": "ref:victron-mppt-100-50 default LiFePO4 charge profile"
+          }
+        },
+        "limits": {
+          "source": "ref:victron-mppt-100-50",
+          "derateStartC": 40,
+          "derateEndC": 80,
+          "shutdownC": 90,
+          "damageTemperatureC": 120,
+          "damageTemperatureSource": "estimate:printed-circuit assembly solder and capacitor limit",
+          "overVoltageDamageMultiple": 1.15,
+          "overVoltageDamageSource": "estimate:input capacitor voltage rating margin above the rated 100 V input"
+        },
+        "thermal": {
+          "nodes": {
+            "heatsink": {
+              "material": "aluminium",
+              "massKg": 3.0,
+              "surface": { "geometry": "verticalPlate", "areaM2": 0.30, "characteristicLengthM": 0.25 }
+            }
+          },
+          "links": [],
+          "heatNode": "heatsink",
+          "source": "estimate:185 x 250 x 95 mm finned aluminium case; the fin area roughly doubles the bare box area of 0.175 m2"
+        }
+      }
+    },
+    {
+      "id": "controller-pwm-30a",
+      "group": "controller",
+      "name": "PWM 30 A charge controller",
+      "description": "Pulse-width-modulated controller that clamps the array to battery voltage.",
+      "gridSize": { "width": 4, "height": 3 },
+      "specifications": {
+        "PV input": "28 V maximum open circuit",
+        "Charge current": "30 A maximum",
+        "Series drop": "0.35 V",
+        "Self consumption": "0.1 W",
+        "Charge stages": "bulk, absorption, float",
+        "Mass": "0.4 kg"
+      },
+      "terminals": [
+        { "id": "pv-positive", "label": "PV +", "role": "pv-positive", "domain": "dc", "edge": "left", "offset": 0.3 },
+        { "id": "pv-negative", "label": "PV −", "role": "pv-negative", "domain": "dc", "edge": "left", "offset": 0.7 },
+        { "id": "battery-positive", "label": "B +", "role": "battery-positive", "domain": "dc", "edge": "right", "offset": 0.3 },
+        { "id": "battery-negative", "label": "B −", "role": "battery-negative", "domain": "dc", "edge": "right", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "chargeController",
+        "source": "estimate:generic 30 A PWM controller; series drop and on-resistance from a two-MOSFET pass element",
+        "topology": "pwm",
+        "electrical": {
+          "maxInputVoltage": 28,
+          "maxChargeCurrentAmps": 30,
+          "idleDrawWatts": 0.1,
+          "onResistanceOhms": 0.012,
+          "onResistanceSource": "derived:0.35 V drop at the 30 A rating",
+          "controlResistanceOhms": 0.05,
+          "outputRegulationResistanceOhms": 0.02,
+          "negativeBondResistanceOhms": 0.0002,
+          "negativeBondSource": "estimate:internal negative bus bond of a PWM controller",
+          "stages": {
+            "absorbVoltagePer12V": 14.4,
+            "floatVoltagePer12V": 13.5,
+            "absorbHoldSeconds": 7200,
+            "tailCurrentFraction": 0.02,
+            "source": "estimate:common PWM controller LiFePO4 profile, matched to ref:victron-mppt-100-50"
+          }
+        },
+        "limits": {
+          "source": "estimate:generic 30 A PWM controller",
+          "derateStartC": 45,
+          "derateEndC": 75,
+          "shutdownC": 85,
+          "damageTemperatureC": 110,
+          "overVoltageDamageMultiple": 1.15
+        },
+        "thermal": {
+          "nodes": {
+            "heatsink": {
+              "material": "aluminium",
+              "massKg": 0.4,
+              "surface": { "geometry": "verticalPlate", "areaM2": 0.032, "characteristicLengthM": 0.09 }
+            }
+          },
+          "links": [],
+          "heatNode": "heatsink",
+          "source": "estimate:135 x 70 x 35 mm case with a small integral heatsink"
+        }
+      }
+    },
+    {
+      "id": "inverter-12v-1000w",
+      "group": "inverter",
+      "name": "12 V 1 kW inverter",
+      "description": "Isolated 12 volt inverter, 1,000 W continuous at 120 V AC.",
+      "gridSize": { "width": 5, "height": 3 },
+      "specifications": {
+        "DC input": "12 V (9.3–17 V)",
+        "AC output": "120 V / 60 Hz",
+        "Continuous": "1,000 W at 25 °C",
+        "Peak": "2,400 W",
+        "No-load draw": "8 W",
+        "Peak efficiency": "92 %",
+        "Mass": "3.6 kg"
+      },
+      "terminals": [
+        { "id": "dc-positive", "label": "DC +", "role": "dc-positive", "domain": "dc", "edge": "left", "offset": 0.3 },
+        { "id": "dc-negative", "label": "DC −", "role": "dc-negative", "domain": "dc", "edge": "left", "offset": 0.7 },
+        { "id": "ac-line", "label": "AC L", "role": "ac-line", "domain": "ac", "edge": "right", "offset": 0.3 },
+        { "id": "ac-neutral", "label": "AC N", "role": "ac-neutral", "domain": "ac", "edge": "right", "offset": 0.7, "reference": true }
+      ],
+      "model": {
+        "type": "inverter",
+        "source": "ref:victron-phoenix-1200",
+        "electrical": {
+          "nominalInputVoltage": 12,
+          "outputVoltage": 120,
+          "outputFrequencyHz": 60,
+          "continuousOutputWatts": 1000,
+          "peakOutputWatts": 2400,
+          "idleDrawWatts": 8,
+          "efficiencyCurve": [
+            { "loadFraction": 0.05, "efficiency": 0.80 },
+            { "loadFraction": 0.1, "efficiency": 0.87 },
+            { "loadFraction": 0.2, "efficiency": 0.905 },
+            { "loadFraction": 0.5, "efficiency": 0.92 },
+            { "loadFraction": 0.75, "efficiency": 0.915 },
+            { "loadFraction": 1.0, "efficiency": 0.905 }
+          ],
+          "efficiencyCurveSource": "ref:victron-phoenix-1200 peak efficiency 92 %; the curve shape follows the published efficiency graph",
+          "efficiencyTempCoefficientPerC": -0.0002,
+          "efficiencyTempCoefficientSource": "estimate:conduction losses rise with junction temperature, 0.02 efficiency points per 100 K",
+          "outputResistanceOhms": 0.15,
+          "outputResistanceSource": "derived:about 1 % output voltage droop at the 1,000 W rating, consistent with the datasheet output voltage tolerance",
+          "bodyDiode": {
+            "saturationCurrentAmps": 1e-9,
+            "idealityFactor": 1.5,
+            "seriesResistanceOhms": 0.01,
+            "source": "estimate:two H-bridge MOSFET body diodes in series with the DC wiring, conducting on reverse polarity"
+          }
+        },
+        "limits": {
+          "source": "ref:victron-phoenix-1200",
+          "underVoltageTrip": 9.3,
+          "underVoltageRestart": 10.9,
+          "overVoltageTrip": 17.0,
+          "overVoltageRestart": 15.5,
+          "restartDelaySeconds": 30,
+          "restartDelaySource": "estimate:typical restart lockout after a protective shutdown",
+          "overloadCurve": [
+            { "multiple": 1.05, "seconds": 1800 },
+            { "multiple": 1.2, "seconds": 600 },
+            { "multiple": 1.5, "seconds": 60 },
+            { "multiple": 2.0, "seconds": 5 },
+            { "multiple": 2.4, "seconds": 1 }
+          ],
+          "overloadCurveSource": "ref:victron-phoenix-1200 continuous, 30 minute and peak power ratings",
+          "derateStartC": 40,
+          "derateEndC": 80,
+          "shutdownC": 90,
+          "damageTemperatureC": 130,
+          "damageTemperatureSource": "estimate:electrolytic capacitor and solder limit",
+          "reversePolarityDamageJoules": 400,
+          "reversePolarityDamageSource": "estimate:energy that destroys the H-bridge body diodes if no fuse clears first"
+        },
+        "thermal": {
+          "nodes": {
+            "heatsink": {
+              "material": "aluminium",
+              "massKg": 3.6,
+              "surface": {
+                "geometry": "verticalPlate",
+                "areaM2": 0.16,
+                "characteristicLengthM": 0.23,
+                "forcedAirVelocityMPerS": 2.0,
+                "fanOnTemperatureC": 45
+              }
+            }
+          },
+          "links": [],
+          "heatNode": "heatsink",
+          "source": "estimate:230 x 120 x 70 mm case with an integral heatsink and a temperature-controlled fan"
+        }
+      }
+    },
+    {
+      "id": "inverter-48v-2400w",
+      "group": "inverter",
+      "name": "48 V 2.4 kW inverter",
+      "description": "Isolated 48 volt inverter, 2,400 W continuous at 120 V AC.",
+      "gridSize": { "width": 6, "height": 4 },
+      "specifications": {
+        "DC input": "48 V (37.2–66 V)",
+        "AC output": "120 V / 60 Hz",
+        "Continuous": "2,400 W at 25 °C",
+        "Peak": "6,000 W",
+        "No-load draw": "20 W",
+        "Peak efficiency": "95 %",
+        "Mass": "19 kg"
+      },
+      "terminals": [
+        { "id": "dc-positive", "label": "DC +", "role": "dc-positive", "domain": "dc", "edge": "left", "offset": 0.3 },
+        { "id": "dc-negative", "label": "DC −", "role": "dc-negative", "domain": "dc", "edge": "left", "offset": 0.7 },
+        { "id": "ac-line", "label": "AC L", "role": "ac-line", "domain": "ac", "edge": "right", "offset": 0.3 },
+        { "id": "ac-neutral", "label": "AC N", "role": "ac-neutral", "domain": "ac", "edge": "right", "offset": 0.7, "reference": true }
+      ],
+      "model": {
+        "type": "inverter",
+        "source": "ref:victron-multiplus",
+        "electrical": {
+          "nominalInputVoltage": 48,
+          "outputVoltage": 120,
+          "outputFrequencyHz": 60,
+          "continuousOutputWatts": 2400,
+          "peakOutputWatts": 6000,
+          "idleDrawWatts": 20,
+          "efficiencyCurve": [
+            { "loadFraction": 0.05, "efficiency": 0.86 },
+            { "loadFraction": 0.1, "efficiency": 0.91 },
+            { "loadFraction": 0.2, "efficiency": 0.94 },
+            { "loadFraction": 0.5, "efficiency": 0.95 },
+            { "loadFraction": 0.75, "efficiency": 0.945 },
+            { "loadFraction": 1.0, "efficiency": 0.935 }
+          ],
+          "efficiencyCurveSource": "ref:victron-multiplus peak efficiency 95 %; the curve shape follows the published efficiency graph",
+          "efficiencyTempCoefficientPerC": -0.0002,
+          "efficiencyTempCoefficientSource": "estimate:conduction losses rise with junction temperature, 0.02 efficiency points per 100 K",
+          "outputResistanceOhms": 0.05,
+          "outputResistanceSource": "derived:about 1 % output voltage droop at the 2,400 W rating",
+          "bodyDiode": {
+            "saturationCurrentAmps": 1e-9,
+            "idealityFactor": 1.5,
+            "seriesResistanceOhms": 0.005,
+            "source": "estimate:two H-bridge MOSFET body diodes in series with the DC wiring, conducting on reverse polarity"
+          }
+        },
+        "limits": {
+          "source": "ref:victron-multiplus",
+          "underVoltageTrip": 37.2,
+          "underVoltageRestart": 43.2,
+          "overVoltageTrip": 66.0,
+          "overVoltageRestart": 62.0,
+          "restartDelaySeconds": 30,
+          "restartDelaySource": "estimate:typical restart lockout after a protective shutdown",
+          "overloadCurve": [
+            { "multiple": 1.05, "seconds": 1800 },
+            { "multiple": 1.2, "seconds": 600 },
+            { "multiple": 1.5, "seconds": 60 },
+            { "multiple": 2.0, "seconds": 5 },
+            { "multiple": 2.5, "seconds": 1 }
+          ],
+          "overloadCurveSource": "ref:victron-multiplus continuous, 30 minute and peak power ratings",
+          "derateStartC": 40,
+          "derateEndC": 80,
+          "shutdownC": 90,
+          "damageTemperatureC": 130,
+          "damageTemperatureSource": "estimate:electrolytic capacitor and solder limit",
+          "reversePolarityDamageJoules": 1500,
+          "reversePolarityDamageSource": "estimate:energy that destroys the H-bridge body diodes if no fuse clears first"
+        },
+        "thermal": {
+          "nodes": {
+            "heatsink": {
+              "material": "aluminium",
+              "massKg": 19.0,
+              "surface": {
+                "geometry": "verticalPlate",
+                "areaM2": 0.36,
+                "characteristicLengthM": 0.362,
+                "forcedAirVelocityMPerS": 2.5,
+                "fanOnTemperatureC": 45
+              }
+            }
+          },
+          "links": [],
+          "heatNode": "heatsink",
+          "source": "estimate:362 x 258 x 218 mm case, exposed area excludes the wall-mounting face, temperature-controlled fan"
+        }
+      }
+    },
+    {
+      "id": "load-incandescent-100w",
+      "group": "load",
+      "name": "100 W incandescent lamp",
+      "description": "Tungsten filament lamp. Resistance follows filament temperature, so cold inrush is emergent.",
+      "gridSize": { "width": 3, "height": 3 },
+      "specifications": {
+        "Supply": "120 V AC",
+        "Rated power": "100 W",
+        "Hot resistance": "144 Ω",
+        "Cold resistance": "8.9 Ω",
+        "Filament": "58.9 µm × 436 mm tungsten",
+        "Colour temperature": "≈ 2,700 °C"
+      },
+      "terminals": [
+        { "id": "ac-line", "label": "AC L", "role": "ac-line", "domain": "ac", "edge": "left", "offset": 0.3 },
+        { "id": "ac-neutral", "label": "AC N", "role": "ac-neutral", "domain": "ac", "edge": "left", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "load",
+        "source": "ref:ge-lamp-handbook",
+        "electrical": {
+          "behaviour": "incandescent",
+          "ratedVoltage": 120,
+          "ratedPowerWatts": 100,
+          "filament": {
+            "material": "tungsten",
+            "diameterM": 5.892e-5,
+            "lengthM": 0.4356,
+            "viewFactor": 0.8,
+            "source": "derived:the only filament geometry that simultaneously gives the rated 144 ohm hot resistance and radiates 100 W at the 2700 C colour temperature of ref:ge-lamp-handbook, using the tungsten resistivity power law and emissivity of ref:crc-tungsten. Cross-check: the resulting cold-to-hot resistance ratio is 16, against the published value of about 15."
+          }
+        },
+        "limits": {
+          "source": "ref:ge-lamp-handbook",
+          "filamentBurnoutTemperatureC": 3000,
+          "filamentBurnoutSource": "estimate:accelerated tungsten evaporation well below the 3422 C melting point ends filament life quickly",
+          "damageMode": "open"
+        },
+        "thermal": {
+          "nodes": {
+            "filament": { "material": "tungsten", "massKg": 2.292e-5 },
+            "envelope": {
+              "material": "soda-lime-glass",
+              "massKg": 0.05,
+              "surface": { "geometry": "sphere", "areaM2": 0.0113, "characteristicLengthM": 0.06 }
+            }
+          },
+          "links": [{ "from": "filament", "to": "envelope", "conductanceWPerK": 0.002 }],
+          "radiationLinks": [
+            {
+              "from": "filament",
+              "to": "envelope",
+              "areaM2": 8.064e-5,
+              "emissivity": 0.35,
+              "viewFactor": 0.8,
+              "transmittance": 0.85
+            }
+          ],
+          "heatNode": "filament",
+          "source": "derived:filament mass from the derived geometry and the tungsten density of ref:crc-handbook; radiating area is pi*d*L. Envelope is an A19 bulb, 60 mm sphere, 0.05 kg of glass and base (estimate). The transmittance of 0.85 is the complement of the soda-lime infrared absorptance of ref:matweb-materials, and the fill-gas conduction of 0.002 W/K is an estimate for an argon-filled envelope."
+        }
+      }
+    },
+    {
+      "id": "load-led-10w",
+      "group": "load",
+      "name": "10 W LED lamp",
+      "description": "Driver-fed LED lamp: constant power above its minimum supply voltage.",
+      "gridSize": { "width": 3, "height": 3 },
+      "specifications": {
+        "Supply": "120 V AC (90–135 V)",
+        "Rated power": "10 W",
+        "Light output": "25 % of input",
+        "Mass": "0.07 kg"
+      },
+      "terminals": [
+        { "id": "ac-line", "label": "AC L", "role": "ac-line", "domain": "ac", "edge": "left", "offset": 0.3 },
+        { "id": "ac-neutral", "label": "AC N", "role": "ac-neutral", "domain": "ac", "edge": "left", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "load",
+        "source": "estimate:generic 10 W / 800 lm retrofit lamp; 25 % wall-plug efficiency is representative of current mid-range LED lamps",
+        "electrical": {
+          "behaviour": "constantPower",
+          "ratedVoltage": 120,
+          "ratedPowerWatts": 10,
+          "minOperatingVoltage": 90,
+          "luminousEfficiency": 0.25
+        },
+        "limits": {
+          "source": "estimate:driver electrolytic capacitor and LED junction limits",
+          "overVoltageDamage": 140,
+          "damageTemperatureC": 105,
+          "damageMode": "open"
+        },
+        "thermal": {
+          "nodes": {
+            "heatsink": {
+              "material": "aluminium",
+              "massKg": 0.07,
+              "surface": { "geometry": "sphere", "areaM2": 0.008, "characteristicLengthM": 0.05 }
+            }
+          },
+          "links": [],
+          "heatNode": "heatsink",
+          "source": "estimate:A19 form factor with an aluminium heat-spreader body"
+        }
+      }
+    },
+    {
+      "id": "load-hair-dryer-1500w",
+      "group": "load",
+      "name": "1,500 W hair dryer",
+      "description": "Nichrome element with a fan: constant resistance, cooled by its own air stream.",
+      "gridSize": { "width": 5, "height": 3 },
+      "specifications": {
+        "Supply": "120 V AC",
+        "Rated power": "1,500 W",
+        "Element resistance": "9.6 Ω",
+        "Air flow": "0.02 kg/s",
+        "Mass": "0.6 kg"
+      },
+      "terminals": [
+        { "id": "ac-line", "label": "AC L", "role": "ac-line", "domain": "ac", "edge": "left", "offset": 0.3 },
+        { "id": "ac-neutral", "label": "AC N", "role": "ac-neutral", "domain": "ac", "edge": "left", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "load",
+        "source": "estimate:generic 1,500 W hand-held hair dryer; element alloy properties from ref:nichrome-properties",
+        "electrical": {
+          "behaviour": "constantResistance",
+          "ratedVoltage": 120,
+          "ratedPowerWatts": 1500,
+          "elementMaterial": "nichrome",
+          "minOperatingVoltage": 0
+        },
+        "limits": {
+          "source": "ref:nichrome-properties",
+          "damageTemperatureC": 1000,
+          "damageTemperatureSource": "estimate:element oxidation limit, well below the 1400 C alloy melting point",
+          "damageMode": "open"
+        },
+        "thermal": {
+          "nodes": {
+            "element": {
+              "material": "nichrome",
+              "massKg": 0.02,
+              "surface": { "geometry": "airStream", "areaM2": 0.01, "airStreamMassFlowKgPerS": 0.02 }
+            },
+            "body": {
+              "material": "abs-plastic",
+              "massKg": 0.58,
+              "surface": { "geometry": "horizontalCylinder", "areaM2": 0.06, "characteristicLengthM": 0.07 }
+            }
+          },
+          "links": [{ "from": "element", "to": "body", "conductanceWPerK": 0.5 }],
+          "heatNode": "element",
+          "source": "derived:the air-stream conductance is mdot*cp with mdot = 0.02 kg/s (estimate for a hand-held dryer) and the air specific heat of ref:incropera, which gives the 70-80 K outlet rise these appliances are specified for. Element and body masses are estimates."
+        }
+      }
+    },
+    {
+      "id": "load-fridge-120w",
+      "group": "load",
+      "name": "Refrigerator",
+      "description": "Duty-cycled compressor with locked-rotor inrush at each start.",
+      "gridSize": { "width": 5, "height": 4 },
+      "specifications": {
+        "Supply": "120 V AC (min 100 V)",
+        "Running power": "120 W",
+        "Duty cycle": "35 %",
+        "Inrush": "6 × for 0.4 s",
+        "Daily energy": "≈ 1.0 kWh",
+        "Mass": "50 kg"
+      },
+      "terminals": [
+        { "id": "ac-line", "label": "AC L", "role": "ac-line", "domain": "ac", "edge": "left", "offset": 0.3 },
+        { "id": "ac-neutral", "label": "AC N", "role": "ac-neutral", "domain": "ac", "edge": "left", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "load",
+        "source": "ref:energystar-fridge",
+        "electrical": {
+          "behaviour": "compressor",
+          "ratedVoltage": 120,
+          "ratedPowerWatts": 120,
+          "dutyCycle": 0.35,
+          "cycleSeconds": 1800,
+          "inrushMultiple": 6,
+          "inrushSeconds": 0.4,
+          "minOperatingVoltage": 100,
+          "startsRunning": true,
+          "inrushSource": "ref:energystar-fridge locked-rotor current of a single-phase induction compressor is 5-8 times running current"
+        },
+        "limits": {
+          "source": "estimate:motor winding insulation class and stall protection",
+          "damageTemperatureC": 130,
+          "damageMode": "open",
+          "stallVoltageFraction": 0.8,
+          "stallVoltageSource": "estimate:a single-phase compressor cannot start below about 80 % of nameplate voltage"
+        },
+        "thermal": {
+          "nodes": {
+            "cabinet": {
+              "material": "mild-steel",
+              "massKg": 50,
+              "surface": { "geometry": "verticalPlate", "areaM2": 3.0, "characteristicLengthM": 1.4 }
+            }
+          },
+          "links": [],
+          "heatNode": "cabinet",
+          "source": "estimate:600 x 650 x 1400 mm cabinet; all compressor input power ends up as room heat"
+        }
+      }
+    },
+    {
+      "id": "load-dc-fridge-12v-45w",
+      "group": "load",
+      "name": "12 V DC fridge",
+      "description": "DC compressor fridge wired straight to the battery bus. Duty-cycled, with locked-rotor inrush and its own low-voltage cut-out.",
+      "gridSize": { "width": 5, "height": 4 },
+      "specifications": {
+        "Supply": "12 V DC (cut-out 10.4 V)",
+        "Running power": "45 W",
+        "Duty cycle": "40 %",
+        "Inrush": "5 × for 0.3 s",
+        "Daily energy": "≈ 430 Wh",
+        "Mass": "22 kg"
+      },
+      "terminals": [
+        { "id": "positive", "label": "+", "role": "positive", "domain": "dc", "edge": "left", "offset": 0.3 },
+        { "id": "negative", "label": "−", "role": "negative", "domain": "dc", "edge": "left", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "load",
+        "source": "ref:secop-bd35f",
+        "electrical": {
+          "behaviour": "compressor",
+          "ratedVoltage": 12.8,
+          "ratedPowerWatts": 45,
+          "dutyCycle": 0.4,
+          "cycleSeconds": 1500,
+          "inrushMultiple": 5,
+          "inrushSeconds": 0.3,
+          "minOperatingVoltage": 10.4,
+          "startsRunning": true,
+          "dutyCycleSource": "estimate:a well-insulated 12 V chest fridge in a 20 C room runs about 40 % of the time, which reproduces the 430 Wh/day of the Vitrifrigo product data"
+        },
+        "limits": {
+          "source": "ref:secop-bd35f",
+          "damageTemperatureC": 130,
+          "damageMode": "open",
+          "overVoltageDamage": 17.4,
+          "overVoltageSource": "ref:secop-bd35f electronic unit is rated 10.4-17.0 V on the 12 V setting"
+        },
+        "thermal": {
+          "nodes": {
+            "cabinet": {
+              "material": "mild-steel",
+              "massKg": 22,
+              "surface": { "geometry": "verticalPlate", "areaM2": 1.6, "characteristicLengthM": 0.6 }
+            }
+          },
+          "links": [],
+          "heatNode": "cabinet",
+          "source": "estimate:520 x 450 x 600 mm insulated box; all compressor input power leaves as room heat"
+        }
+      }
+    },
+    {
+      "id": "load-dc-pump-12v-90w",
+      "group": "load",
+      "name": "12 V DC water pump",
+      "description": "Diaphragm pump with an internal bypass, so it draws close to constant power.",
+      "gridSize": { "width": 4, "height": 3 },
+      "specifications": {
+        "Supply": "12 V DC (min 9 V)",
+        "Rated power": "90 W",
+        "Rated current": "7.5 A at 12 V",
+        "Mass": "2.3 kg"
+      },
+      "terminals": [
+        { "id": "positive", "label": "+", "role": "positive", "domain": "dc", "edge": "left", "offset": 0.3 },
+        { "id": "negative", "label": "−", "role": "negative", "domain": "dc", "edge": "left", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "load",
+        "source": "ref:shurflo-4008",
+        "electrical": {
+          "behaviour": "constantPower",
+          "ratedVoltage": 12,
+          "ratedPowerWatts": 90,
+          "minOperatingVoltage": 9,
+          "minOperatingVoltageSource": "estimate:the motor stalls below about 75 % of nameplate voltage"
+        },
+        "limits": {
+          "source": "ref:shurflo-4008",
+          "damageTemperatureC": 120,
+          "damageMode": "open",
+          "overVoltageDamage": 16
+        },
+        "thermal": {
+          "nodes": {
+            "housing": {
+              "material": "abs-plastic",
+              "massKg": 2.3,
+              "surface": { "geometry": "sphere", "areaM2": 0.09, "characteristicLengthM": 0.12 }
+            }
+          },
+          "links": [],
+          "heatNode": "housing",
+          "source": "estimate:230 x 130 x 90 mm pump body; hydraulic output is small enough that essentially all input power appears as heat"
+        }
+      }
+    },
+    {
+      "id": "load-dc-heater-12v-100w",
+      "group": "load",
+      "name": "12 V DC heating element",
+      "description": "Bare Ni80Cr20 element. No electronics, so current follows Ohm's law at the element's temperature.",
+      "gridSize": { "width": 4, "height": 3 },
+      "specifications": {
+        "Supply": "12 V DC",
+        "Rated power": "100 W at 12 V",
+        "Cold resistance": "1.44 Ω",
+        "Element": "Ni80Cr20",
+        "Mass": "0.25 kg"
+      },
+      "terminals": [
+        { "id": "positive", "label": "+", "role": "positive", "domain": "dc", "edge": "left", "offset": 0.3 },
+        { "id": "negative", "label": "−", "role": "negative", "domain": "dc", "edge": "left", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "load",
+        "source": "ref:dc-immersion-heater",
+        "electrical": {
+          "behaviour": "constantResistance",
+          "ratedVoltage": 12,
+          "ratedPowerWatts": 100,
+          "elementMaterial": "nichrome"
+        },
+        "limits": {
+          "source": "ref:nichrome-properties",
+          "damageTemperatureC": 1200,
+          "damageMode": "open",
+          "damageTemperatureSource": "ref:nichrome-properties Nikrothal 80 maximum element temperature is 1200 C in air"
+        },
+        "thermal": {
+          "nodes": {
+            "element": {
+              "material": "nichrome",
+              "massKg": 0.05,
+              "surface": { "geometry": "horizontalCylinder", "areaM2": 0.012, "characteristicLengthM": 0.008 }
+            },
+            "sheath": {
+              "material": "mild-steel",
+              "massKg": 0.2,
+              "surface": { "geometry": "horizontalCylinder", "areaM2": 0.03, "characteristicLengthM": 0.014 }
+            }
+          },
+          "links": [
+            { "from": "element", "to": "sheath", "conductanceWPerK": 1.2 }
+          ],
+          "heatNode": "element",
+          "source": "estimate:8 mm coiled element inside a 14 mm steel sheath, 300 mm long; the 1.2 W/K element-to-sheath conductance is magnesia-filled contact, per ref:matweb-materials"
+        }
+      }
+    },
+    {
+      "id": "fuse-anl-100a",
+      "group": "protection",
+      "name": "100 A ANL fuse",
+      "description": "Bolt-down DC fuse. Opens permanently on its time-current curve.",
+      "gridSize": { "width": 3, "height": 2 },
+      "specifications": {
+        "Rating": "100 A",
+        "Resistance": "0.6 mΩ",
+        "Clearing at 2×": "40 s",
+        "Clearing at 10×": "0.06 s",
+        "Reset": "not resettable"
+      },
+      "terminals": [
+        { "id": "a", "label": "1", "role": "pass-a", "domain": "dc", "edge": "left", "offset": 0.5 },
+        { "id": "b", "label": "2", "role": "pass-b", "domain": "dc", "edge": "right", "offset": 0.5 }
+      ],
+      "model": {
+        "type": "fuse",
+        "source": "ref:anl-fuse-curve",
+        "electrical": {
+          "ratedAmps": 100,
+          "coldResistanceOhms": 0.0006,
+          "coldResistanceSource": "estimate:60 mV drop at the rating, typical of an ANL element"
+        },
+        "limits": {
+          "source": "ref:anl-fuse-curve",
+          "timeCurrentCurve": [
+            { "multiple": 1.35, "seconds": 3600 },
+            { "multiple": 2.0, "seconds": 40 },
+            { "multiple": 3.0, "seconds": 5 },
+            { "multiple": 5.0, "seconds": 0.8 },
+            { "multiple": 10.0, "seconds": 0.06 }
+          ],
+          "holdMultiple": 1.1,
+          "holdMultipleSource": "ref:anl-fuse-curve must-hold current",
+          "thermalTimeConstantSeconds": 60,
+          "thermalTimeConstantSource": "estimate:element cooling time constant used to decay the accumulated damage below the hold current"
+        },
+        "thermal": {
+          "nodes": {
+            "element": {
+              "material": "copper",
+              "massKg": 0.02,
+              "surface": { "geometry": "horizontalCylinder", "areaM2": 0.0025, "characteristicLengthM": 0.02 }
+            }
+          },
+          "links": [],
+          "heatNode": "element",
+          "source": "estimate:ANL element and terminal mass, 80 x 20 mm body"
+        }
+      }
+    },
+    {
+      "id": "fuse-anl-200a",
+      "group": "protection",
+      "name": "200 A ANL fuse",
+      "description": "Bolt-down DC fuse for main battery feeds.",
+      "gridSize": { "width": 3, "height": 2 },
+      "specifications": {
+        "Rating": "200 A",
+        "Resistance": "0.3 mΩ",
+        "Clearing at 2×": "40 s",
+        "Clearing at 10×": "0.06 s",
+        "Reset": "not resettable"
+      },
+      "terminals": [
+        { "id": "a", "label": "1", "role": "pass-a", "domain": "dc", "edge": "left", "offset": 0.5 },
+        { "id": "b", "label": "2", "role": "pass-b", "domain": "dc", "edge": "right", "offset": 0.5 }
+      ],
+      "model": {
+        "type": "fuse",
+        "source": "ref:anl-fuse-curve",
+        "electrical": {
+          "ratedAmps": 200,
+          "coldResistanceOhms": 0.0003,
+          "coldResistanceSource": "estimate:60 mV drop at the rating, typical of an ANL element"
+        },
+        "limits": {
+          "source": "ref:anl-fuse-curve",
+          "timeCurrentCurve": [
+            { "multiple": 1.35, "seconds": 3600 },
+            { "multiple": 2.0, "seconds": 40 },
+            { "multiple": 3.0, "seconds": 5 },
+            { "multiple": 5.0, "seconds": 0.8 },
+            { "multiple": 10.0, "seconds": 0.06 }
+          ],
+          "holdMultiple": 1.1,
+          "holdMultipleSource": "ref:anl-fuse-curve must-hold current",
+          "thermalTimeConstantSeconds": 90,
+          "thermalTimeConstantSource": "estimate:element cooling time constant, scaled with element mass"
+        },
+        "thermal": {
+          "nodes": {
+            "element": {
+              "material": "copper",
+              "massKg": 0.035,
+              "surface": { "geometry": "horizontalCylinder", "areaM2": 0.0035, "characteristicLengthM": 0.024 }
+            }
+          },
+          "links": [],
+          "heatNode": "element",
+          "source": "estimate:ANL element and terminal mass, 95 x 24 mm body"
+        }
+      }
+    },
+    {
+      "id": "fuse-atc-30a",
+      "group": "protection",
+      "name": "30 A blade fuse",
+      "description": "Automotive blade fuse for branch circuits.",
+      "gridSize": { "width": 2, "height": 2 },
+      "specifications": {
+        "Rating": "30 A",
+        "Resistance": "4 mΩ",
+        "Clearing at 2×": "5 s",
+        "Clearing at 10×": "0.02 s",
+        "Reset": "not resettable"
+      },
+      "terminals": [
+        { "id": "a", "label": "1", "role": "pass-a", "domain": "dc", "edge": "left", "offset": 0.5 },
+        { "id": "b", "label": "2", "role": "pass-b", "domain": "dc", "edge": "right", "offset": 0.5 }
+      ],
+      "model": {
+        "type": "fuse",
+        "source": "ref:atc-fuse-curve",
+        "electrical": {
+          "ratedAmps": 30,
+          "coldResistanceOhms": 0.004,
+          "coldResistanceSource": "ref:atc-fuse-curve nominal cold resistance for a 30 A ATC element"
+        },
+        "limits": {
+          "source": "ref:atc-fuse-curve",
+          "timeCurrentCurve": [
+            { "multiple": 1.35, "seconds": 1800 },
+            { "multiple": 2.0, "seconds": 5 },
+            { "multiple": 3.0, "seconds": 1 },
+            { "multiple": 5.0, "seconds": 0.15 },
+            { "multiple": 10.0, "seconds": 0.02 }
+          ],
+          "holdMultiple": 1.1,
+          "holdMultipleSource": "ref:atc-fuse-curve must-hold current",
+          "thermalTimeConstantSeconds": 12,
+          "thermalTimeConstantSource": "estimate:small zinc element cooling time constant"
+        },
+        "thermal": {
+          "nodes": {
+            "element": {
+              "material": "copper",
+              "massKg": 0.002,
+              "surface": { "geometry": "horizontalCylinder", "areaM2": 0.0004, "characteristicLengthM": 0.008 }
+            }
+          },
+          "links": [],
+          "heatNode": "element",
+          "source": "estimate:ATC blade fuse body 19 x 5 x 19 mm"
+        }
+      }
+    },
+    {
+      "id": "breaker-dc-50a",
+      "group": "protection",
+      "name": "50 A DC breaker",
+      "description": "Thermal DC circuit breaker with a manual reset.",
+      "gridSize": { "width": 3, "height": 2 },
+      "specifications": {
+        "Rating": "50 A",
+        "Resistance": "3 mΩ",
+        "Clearing at 2×": "45 s",
+        "Instantaneous": "12 × in 50 ms",
+        "Reset": "manual"
+      },
+      "terminals": [
+        { "id": "a", "label": "1", "role": "pass-a", "domain": "dc", "edge": "left", "offset": 0.5 },
+        { "id": "b", "label": "2", "role": "pass-b", "domain": "dc", "edge": "right", "offset": 0.5 }
+      ],
+      "model": {
+        "type": "breaker",
+        "source": "ref:bluesea-187",
+        "electrical": {
+          "ratedAmps": 50,
+          "coldResistanceOhms": 0.003,
+          "coldResistanceSource": "estimate:150 mV drop at the rating, typical of a thermal DC breaker"
+        },
+        "limits": {
+          "source": "ref:bluesea-187",
+          "timeCurrentCurve": [
+            { "multiple": 1.35, "seconds": 900 },
+            { "multiple": 2.0, "seconds": 45 },
+            { "multiple": 3.0, "seconds": 10 },
+            { "multiple": 5.0, "seconds": 2.5 },
+            { "multiple": 10.0, "seconds": 0.6 }
+          ],
+          "holdMultiple": 1.0,
+          "magneticMultiple": 12,
+          "magneticTripSeconds": 0.05,
+          "magneticSource": "estimate:a thermal DC breaker has no magnetic element, but the bimetal opens within about 50 ms at 12 times rating",
+          "thermalTimeConstantSeconds": 120,
+          "thermalTimeConstantSource": "estimate:bimetal cooling time constant",
+          "startsClosed": true
+        },
+        "thermal": {
+          "nodes": {
+            "bimetal": {
+              "material": "copper",
+              "massKg": 0.03,
+              "surface": { "geometry": "verticalPlate", "areaM2": 0.006, "characteristicLengthM": 0.04 }
+            }
+          },
+          "links": [],
+          "heatNode": "bimetal",
+          "source": "estimate:panel-mount breaker, 40 x 25 x 60 mm body"
+        }
+      }
+    },
+    {
+      "id": "breaker-ac-15a",
+      "group": "protection",
+      "name": "15 A AC breaker",
+      "description": "Thermal-magnetic branch breaker with a manual reset.",
+      "gridSize": { "width": 3, "height": 2 },
+      "specifications": {
+        "Rating": "15 A",
+        "Resistance": "6 mΩ",
+        "Clearing at 2×": "60 s",
+        "Instantaneous": "10 × in 16 ms",
+        "Reset": "manual"
+      },
+      "terminals": [
+        { "id": "a", "label": "1", "role": "pass-a", "domain": "ac", "edge": "left", "offset": 0.5 },
+        { "id": "b", "label": "2", "role": "pass-b", "domain": "ac", "edge": "right", "offset": 0.5 }
+      ],
+      "model": {
+        "type": "breaker",
+        "source": "ref:ul489",
+        "electrical": {
+          "ratedAmps": 15,
+          "coldResistanceOhms": 0.006,
+          "coldResistanceSource": "estimate:90 mV drop at the rating, typical of a moulded-case branch breaker"
+        },
+        "limits": {
+          "source": "ref:ul489",
+          "timeCurrentCurve": [
+            { "multiple": 1.35, "seconds": 3600 },
+            { "multiple": 2.0, "seconds": 60 },
+            { "multiple": 3.0, "seconds": 12 },
+            { "multiple": 5.0, "seconds": 3 },
+            { "multiple": 8.0, "seconds": 1 }
+          ],
+          "holdMultiple": 1.0,
+          "magneticMultiple": 10,
+          "magneticTripSeconds": 0.016,
+          "magneticSource": "ref:ul489 instantaneous region, one AC cycle at 60 Hz",
+          "thermalTimeConstantSeconds": 180,
+          "thermalTimeConstantSource": "estimate:bimetal cooling time constant",
+          "startsClosed": true
+        },
+        "thermal": {
+          "nodes": {
+            "bimetal": {
+              "material": "copper",
+              "massKg": 0.02,
+              "surface": { "geometry": "verticalPlate", "areaM2": 0.005, "characteristicLengthM": 0.04 }
+            }
+          },
+          "links": [],
+          "heatNode": "bimetal",
+          "source": "estimate:single-pole branch breaker, 19 x 30 x 80 mm body"
+        }
+      }
+    },
+    {
+      "id": "breaker-ac-20a",
+      "group": "protection",
+      "name": "20 A AC breaker",
+      "description": "Thermal-magnetic branch breaker with a manual reset.",
+      "gridSize": { "width": 3, "height": 2 },
+      "specifications": {
+        "Rating": "20 A",
+        "Resistance": "5 mΩ",
+        "Clearing at 2×": "60 s",
+        "Instantaneous": "10 × in 16 ms",
+        "Reset": "manual"
+      },
+      "terminals": [
+        { "id": "a", "label": "1", "role": "pass-a", "domain": "ac", "edge": "left", "offset": 0.5 },
+        { "id": "b", "label": "2", "role": "pass-b", "domain": "ac", "edge": "right", "offset": 0.5 }
+      ],
+      "model": {
+        "type": "breaker",
+        "source": "ref:ul489",
+        "electrical": {
+          "ratedAmps": 20,
+          "coldResistanceOhms": 0.005,
+          "coldResistanceSource": "estimate:100 mV drop at the rating, typical of a moulded-case branch breaker"
+        },
+        "limits": {
+          "source": "ref:ul489",
+          "timeCurrentCurve": [
+            { "multiple": 1.35, "seconds": 3600 },
+            { "multiple": 2.0, "seconds": 60 },
+            { "multiple": 3.0, "seconds": 12 },
+            { "multiple": 5.0, "seconds": 3 },
+            { "multiple": 8.0, "seconds": 1 }
+          ],
+          "holdMultiple": 1.0,
+          "magneticMultiple": 10,
+          "magneticTripSeconds": 0.016,
+          "magneticSource": "ref:ul489 instantaneous region, one AC cycle at 60 Hz",
+          "thermalTimeConstantSeconds": 180,
+          "thermalTimeConstantSource": "estimate:bimetal cooling time constant",
+          "startsClosed": true
+        },
+        "thermal": {
+          "nodes": {
+            "bimetal": {
+              "material": "copper",
+              "massKg": 0.02,
+              "surface": { "geometry": "verticalPlate", "areaM2": 0.005, "characteristicLengthM": 0.04 }
+            }
+          },
+          "links": [],
+          "heatNode": "bimetal",
+          "source": "estimate:single-pole branch breaker, 19 x 30 x 80 mm body"
+        }
+      }
+    },
+    {
+      "id": "switch-dc-300a",
+      "group": "protection",
+      "name": "300 A battery switch",
+      "description": "Manual battery disconnect.",
+      "gridSize": { "width": 3, "height": 2 },
+      "specifications": {
+        "Rating": "300 A continuous",
+        "Contact resistance": "0.2 mΩ",
+        "Starts": "closed"
+      },
+      "terminals": [
+        { "id": "a", "label": "1", "role": "pass-a", "domain": "dc", "edge": "left", "offset": 0.5 },
+        { "id": "b", "label": "2", "role": "pass-b", "domain": "dc", "edge": "right", "offset": 0.5 }
+      ],
+      "model": {
+        "type": "switch",
+        "source": "ref:bluesea-9001",
+        "electrical": {
+          "closedResistanceOhms": 0.0002,
+          "closedResistanceSource": "estimate:silver-plated contact resistance for a 300 A battery switch",
+          "startsClosed": true
+        },
+        "limits": {
+          "source": "ref:bluesea-9001",
+          "ratedAmps": 300,
+          "damageTemperatureC": 120,
+          "damageTemperatureSource": "estimate:switch body material limit",
+          "damageMode": "open"
+        },
+        "thermal": {
+          "nodes": {
+            "contact": {
+              "material": "copper",
+              "massKg": 0.25,
+              "surface": { "geometry": "verticalPlate", "areaM2": 0.02, "characteristicLengthM": 0.07 }
+            }
+          },
+          "links": [],
+          "heatNode": "contact",
+          "source": "estimate:m-series switch, 70 mm diameter body with copper studs"
+        }
+      }
+    },
+    {
+      "id": "busbar-250a",
+      "group": "protection",
+      "name": "250 A busbar",
+      "description": "Four-way copper busbar with real resistance.",
+      "gridSize": { "width": 3, "height": 4 },
+      "specifications": {
+        "Rating": "250 A continuous",
+        "Resistance": "50 µΩ per tap",
+        "Taps": "4",
+        "Mass": "0.35 kg"
+      },
+      "terminals": [
+        { "id": "a", "label": "1", "role": "bus", "domain": "dc", "edge": "left", "offset": 0.2 },
+        { "id": "b", "label": "2", "role": "bus", "domain": "dc", "edge": "left", "offset": 0.8 },
+        { "id": "c", "label": "3", "role": "bus", "domain": "dc", "edge": "right", "offset": 0.2 },
+        { "id": "d", "label": "4", "role": "bus", "domain": "dc", "edge": "right", "offset": 0.8 }
+      ],
+      "model": {
+        "type": "busbar",
+        "source": "ref:bluesea-9001",
+        "electrical": {
+          "resistanceOhms": 5e-5,
+          "resistanceSource": "derived:6 mm x 20 mm copper bar, 40 mm from each stud to the bar centre, using the copper resistivity of ref:crc-handbook"
+        },
+        "limits": {
+          "source": "ref:bluesea-9001",
+          "ratedAmps": 250,
+          "damageTemperatureC": 150,
+          "damageTemperatureSource": "estimate:insulating base material limit",
+          "damageMode": "open"
+        },
+        "thermal": {
+          "nodes": {
+            "bar": {
+              "material": "copper",
+              "massKg": 0.35,
+              "surface": { "geometry": "horizontalPlate", "areaM2": 0.02, "characteristicLengthM": 0.02 }
+            }
+          },
+          "links": [],
+          "heatNode": "bar",
+          "source": "estimate:6 x 20 x 160 mm copper bar on an insulating base"
+        }
+      }
+    }
+  ]
+}
