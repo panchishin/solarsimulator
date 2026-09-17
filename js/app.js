@@ -69,6 +69,7 @@ function migrateVersionOne(state) {
         currentAmps: 0,
         powerWatts: 0,
         heatWatts: 0,
+        onFire: false,
         ...component.state
       };
     }
@@ -78,6 +79,7 @@ function migrateVersionOne(state) {
         currentAmps: 0,
         powerWatts: 0,
         heatWatts: 0,
+        onFire: false,
         ...wire.state
       };
     }
@@ -264,8 +266,8 @@ function renderStatus(report) {
     const definition = definitions.get(component.componentId);
     const metrics = report.componentMetrics?.[component.id] ?? component.state ?? {};
     const details = [];
-    if (Number.isFinite(metrics.powerWatts)) details.push(["Power", `${metrics.powerWatts.toFixed(1)} W`]);
-    details.push(["Heat", `${(metrics.heatWatts ?? 0).toFixed(2)} W`]);
+    if (Number.isFinite(metrics.powerWatts)) details.push(["Power", `${metrics.powerWatts.toFixed(0)} W`]);
+    details.push(["Heat", `${(metrics.heatWatts ?? 0).toFixed(0)} W`]);
     if (definition.model.type === "battery") {
       details.push(["Charge", `${Math.round((component.state?.stateOfCharge ?? 0) * 100)}%`]);
     }
@@ -275,21 +277,9 @@ function renderStatus(report) {
       details
     );
   });
-  const wireCards = currentLayout().circuit.wires.map((wire, index) => {
-    const metrics = report.wireMetrics?.[wire.id] ?? wire.state ?? {};
-    return itemCard(
-      `${catalog.wire.name} ${index + 1}`,
-      `${(wire.state?.temperatureC ?? currentLayout().ambientTemperatureC).toFixed(1)} °C`,
-      [
-        ["Current", `${(metrics.currentAmps ?? 0).toFixed(2)} A`],
-        ["Heat", `${(metrics.heatWatts ?? 0).toFixed(3)} W`],
-        ["Length", `${(metrics.lengthMeters ?? wire.state?.lengthMeters ?? 0).toFixed(2)} m`]
-      ]
-    );
-  });
   byId("item-status").replaceChildren(...(
-    itemCards.length || wireCards.length
-      ? [...itemCards, ...wireCards]
+    itemCards.length
+      ? itemCards
       : [paragraph("muted", "Place a component to begin.")]
   ));
 

@@ -192,6 +192,7 @@ h3 { margin-bottom: 0.65rem; font-size: 0.95rem; }
 }
 .circuit-board.drop-target { box-shadow: inset 0 0 0 4px color-mix(in srgb, var(--accent) 55%, transparent); }
 .component-layer, .wire-layer { position: absolute; inset: 0; width: 100%; height: 100%; }
+.component-layer { pointer-events: none; }
 .wire-layer { overflow: visible; pointer-events: none; }
 .wire { stroke: var(--wire); stroke-width: 4; fill: none; pointer-events: stroke; }
 .wire-hit { stroke: transparent; stroke-width: 16; fill: none; pointer-events: stroke; cursor: pointer; }
@@ -209,6 +210,7 @@ h3 { margin-bottom: 0.65rem; font-size: 0.95rem; }
 
 .circuit-component {
   position: absolute;
+  pointer-events: auto;
   min-width: 72px;
   display: grid;
   place-items: center;

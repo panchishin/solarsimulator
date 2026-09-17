@@ -127,7 +127,17 @@ test("wire physical properties derive from Manhattan grid length", () => {
   ];
   const connection = wire("wire", "battery", "positive", "inverter", "dc-positive");
   const properties = wirePhysicalProperties(catalog, components, connection);
-  const expectedGridSpaces = Math.abs(4 - 10) + Math.abs(0.9 - 5.2);
+  const batteryTerminal = rotatedTerminalLayout(
+    batteryDefinition,
+    batteryDefinition.terminals.find(({ id }) => id === "positive")
+  );
+  const inverterTerminal = rotatedTerminalLayout(
+    inverterDefinition,
+    inverterDefinition.terminals.find(({ id }) => id === "dc-positive")
+  );
+  const expectedGridSpaces =
+    Math.abs(batteryTerminal.x - (10 + inverterTerminal.x)) +
+    Math.abs(batteryTerminal.y - (4 + inverterTerminal.y));
 
   assert.ok(Math.abs(properties.lengthMeters - expectedGridSpaces * 0.1) < 1e-9);
   assert.ok(Math.abs(
@@ -150,9 +160,12 @@ test("rotation swaps component dimensions and rotates terminals without changing
     90
   );
 
-  assert.deepEqual(rotatedSize, { width: 3, height: 4 });
+  assert.deepEqual(rotatedSize, {
+    width: batteryDefinition.gridSize.height,
+    height: batteryDefinition.gridSize.width
+  });
   assert.ok(Math.abs(rotatedTerminal.x - 2.1) < 1e-9);
-  assert.equal(rotatedTerminal.y, 4);
+  assert.equal(rotatedTerminal.y, batteryDefinition.gridSize.width);
 
   const battery = component("battery", batteryDefinition, 0, 0);
   const inverter = component("inverter", inverterDefinition, 240, 96);
@@ -293,8 +306,13 @@ test("a battery short naturally produces high current and rapid drain", () => {
   ];
 
   const evaluated = evaluateCircuit(snapshot(components, wires));
-  assert.ok(evaluated.currents.get("battery") < 630);
-  assert.ok(evaluated.currents.get("battery") > 620);
+  const wireResistance = wirePhysicalProperties(catalog, components, wires[0]).resistanceOhms;
+  const expectedCurrent = 12.6 /
+    (batteryDefinition.model.internalResistanceOhms + wireResistance);
+  assert.ok(Math.abs(evaluated.currents.get("battery") - expectedCurrent) < 1e-9);
+  assert.ok(Math.abs(
+    evaluated.wireMetrics.get("short").currentAmps - expectedCurrent
+  ) < 1e-9);
   assert.ok(evaluated.wireMetrics.get("short").heatWatts > 0);
   assert.equal(evaluated.hazards[0].type, "dc-short");
 
@@ -358,7 +376,7 @@ test("two cross-connected batteries form a hot closed source loop", (context) =>
   assert.ok(Math.abs(firstCurrent - secondCurrent) < 1e-9);
   assert.ok(evaluated.wireMetrics.get("cross-a").heatWatts > 0);
   assert.ok(evaluated.wireMetrics.get("cross-b").heatWatts > 0);
-  assert.equal(evaluated.wireMetrics.get("dangling").currentAmps, 0);
+  assert.ok(Math.abs(evaluated.wireMetrics.get("dangling").currentAmps) < 1e-9);
 
   const next = simulateTick(initial, 1);
   context.diagnostic(`Two-battery loop current: ${firstCurrent.toFixed(2)} A`);
@@ -449,11 +467,50 @@ test("the configured tick duration advances simulated time", () => {
   assert.equal(next.components[0].state.energyWh, 960);
 });
 
+test("fire remains latched after cooling, excludes loads, and clears on reset", () => {
+  const battery = component("battery", batteryDefinition);
+  const inverter = component("inverter", inverterDefinition, 240, 0);
+  inverter.state.temperatureC = 150;
+  const load = component("load", lightDefinition, 480, 0);
+  load.state.temperatureC = 500;
+  const connection = wire(
+    "open-wire",
+    "battery",
+    "positive",
+    "inverter",
+    "dc-positive"
+  );
+  connection.state = createWireState(catalog, [battery, inverter, load], connection);
+  connection.state.temperatureC = 150;
+
+  const cooled = simulateTick(
+    snapshot([battery, inverter, load], [connection]),
+    100
+  );
+  const cooledInverter = cooled.components.find(({ id }) => id === "inverter");
+  const cooledLoad = cooled.components.find(({ id }) => id === "load");
+
+  assert.ok(cooledInverter.state.temperatureC < 140);
+  assert.equal(cooledInverter.state.onFire, true);
+  assert.equal(cooledLoad.state.onFire, false);
+  assert.ok(cooled.wires[0].state.temperatureC < 140);
+  assert.equal(cooled.wires[0].state.onFire, true);
+
+  const later = simulateTick(cooled, 100);
+  assert.equal(later.components.find(({ id }) => id === "inverter").state.onFire, true);
+  assert.equal(later.wires[0].state.onFire, true);
+
+  const reset = resetSimulation(later);
+  assert.ok(reset.components.every(({ state }) => state.onFire === false));
+  assert.ok(reset.wires.every(({ state }) => state.onFire === false));
+});
+
 test("reset restores battery charge, ambient temperatures, and elapsed time", () => {
   const battery = component("battery", batteryDefinition);
   battery.state.energyWh = 180;
   battery.state.stateOfCharge = 0.15;
   battery.state.temperatureC = 72;
+  battery.state.onFire = true;
   const inverter = component("inverter", inverterDefinition);
   inverter.state.temperatureC = 48;
   const connection = wire(
@@ -464,6 +521,7 @@ test("reset restores battery charge, ambient temperatures, and elapsed time", ()
     "dc-positive"
   );
   connection.state = { temperatureC: 90, currentAmps: 20, heatWatts: 5 };
+  connection.state.onFire = true;
 
   const reset = resetSimulation({
     ...snapshot([battery, inverter], [connection], 15),
@@ -477,6 +535,8 @@ test("reset restores battery charge, ambient temperatures, and elapsed time", ()
   assert.ok(reset.components.every(({ state }) => state.temperatureC === 15));
   assert.ok(reset.wires.every(({ state }) => state.temperatureC === 15));
   assert.ok(reset.components.every(({ state }) => state.powerWatts === 0));
+  assert.ok(reset.components.every(({ state }) => state.onFire === false));
+  assert.ok(reset.wires.every(({ state }) => state.onFire === false));
   assert.equal(reset.wires[0].from.componentId, "battery");
   assert.equal(reset.wires[0].to.componentId, "inverter");
 });

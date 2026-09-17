@@ -1,10 +1,12 @@
 import {
   componentGridSize,
+  createComponentState,
+  createWireState,
+  isFireActive,
   rotatedTerminalLayout
 } from "./simulation.js";
 
 const GRID_SIZE = 24;
-const FIRE_TEMPERATURE_C = 140;
 
 const byId = (id) => document.getElementById(id);
 
@@ -85,16 +87,7 @@ export class CircuitEditor {
     );
     const id = crypto.randomUUID();
     const ambientTemperatureC = this.getAmbientTemperature();
-    const state = {
-      temperatureC: ambientTemperatureC,
-      currentAmps: 0,
-      powerWatts: 0,
-      heatWatts: 0
-    };
-    if (definition.model.type === "battery") {
-      state.energyWh = definition.model.capacityWh * definition.model.startingStateOfCharge;
-      state.stateOfCharge = definition.model.startingStateOfCharge;
-    }
+    const state = createComponentState(definition, ambientTemperatureC);
     this.circuit.components.push({ id, componentId, rotation: 0, ...position, state });
     this.select({ type: "component", id });
     this.commit();
@@ -115,7 +108,7 @@ export class CircuitEditor {
     if (this.hazardComponentIds().has(component.id)) element.classList.add("hazard");
     if (
       definition.model.type !== "load" &&
-      (component.state?.temperatureC ?? this.getAmbientTemperature()) > FIRE_TEMPERATURE_C
+      isFireActive(component.state)
     ) {
       element.classList.add("on-fire");
     }
@@ -194,6 +187,20 @@ export class CircuitEditor {
       .map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`)
       .join("");
     tooltip.innerHTML = `<h3>${definition.name}</h3><p>${definition.description}</p><dl>${readings}${specifications}</dl>`;
+    tooltip.hidden = false;
+    this.moveTooltip(event);
+  }
+
+  showWireTooltip(event, wire) {
+    const tooltip = byId("tooltip");
+    const metrics = this.report.wireMetrics?.[wire.id] ?? wire.state ?? {};
+    const readings = [
+      ["Temperature", `${(wire.state?.temperatureC ?? this.getAmbientTemperature()).toFixed(1)} °C`],
+      ["Current", `${(metrics.currentAmps ?? 0).toFixed(2)} A`],
+      ["Heat", `${(metrics.heatWatts ?? 0).toFixed(3)} W`],
+      ["Length", `${(metrics.lengthMeters ?? wire.state?.lengthMeters ?? 0).toFixed(2)} m`]
+    ].map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("");
+    tooltip.innerHTML = `<h3>${this.catalog.wire.name}</h3><dl>${readings}</dl>`;
     tooltip.hidden = false;
     this.moveTooltip(event);
   }
@@ -288,14 +295,14 @@ export class CircuitEditor {
           const wire = {
             id: crypto.randomUUID(),
             from,
-            to,
-            state: {
-              temperatureC: this.getAmbientTemperature(),
-              currentAmps: 0,
-              powerWatts: 0,
-              heatWatts: 0
-            }
+            to
           };
+          wire.state = createWireState(
+            this.catalog,
+            this.circuit.components,
+            wire,
+            this.getAmbientTemperature()
+          );
           this.circuit.wires.push(wire);
           this.select({ type: "wire", id: wire.id });
           this.commit();
@@ -356,8 +363,12 @@ export class CircuitEditor {
       const to = this.terminalPoint(wire.to.componentId, wire.to.terminalId);
       const hit = document.createElementNS("http://www.w3.org/2000/svg", "line");
       hit.setAttribute("class", "wire-hit");
+      hit.setAttribute("tabindex", "0");
+      hit.setAttribute("role", "button");
+      hit.setAttribute("aria-label", `${this.catalog.wire.name}. Select wire and view measurements.`);
       const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
       line.setAttribute("class", "wire");
+      line.setAttribute("aria-hidden", "true");
       for (const element of [hit, line]) {
         element.setAttribute("x1", from.x);
         element.setAttribute("y1", from.y);
@@ -365,12 +376,22 @@ export class CircuitEditor {
         element.setAttribute("y2", to.y);
       }
       if (hazardIds.has(wire.id)) line.classList.add("hazard");
-      if ((wire.state?.temperatureC ?? this.getAmbientTemperature()) > FIRE_TEMPERATURE_C) {
+      if (isFireActive(wire.state)) {
         line.classList.add("on-fire");
       }
       if (this.selection?.type === "wire" && this.selection.id === wire.id) line.classList.add("selected");
       hit.addEventListener("click", (event) => {
         event.stopPropagation();
+        this.select({ type: "wire", id: wire.id });
+      });
+      hit.addEventListener("mouseenter", (event) => this.showWireTooltip(event, wire));
+      hit.addEventListener("mousemove", (event) => this.moveTooltip(event));
+      hit.addEventListener("mouseleave", () => this.hideTooltip());
+      hit.addEventListener("focus", (event) => this.showWireTooltip(event, wire));
+      hit.addEventListener("blur", () => this.hideTooltip());
+      hit.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
         this.select({ type: "wire", id: wire.id });
       });
       this.wireLines.append(line, hit);

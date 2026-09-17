@@ -1,5 +1,10 @@
 const EPSILON = 1e-9;
 const GRID_SIZE_PX = 24;
+export const FIRE_TEMPERATURE_C = 140;
+
+export function isFireActive(state, temperatureC = state?.temperatureC) {
+  return state?.onFire === true || temperatureC > FIRE_TEMPERATURE_C;
+}
 
 class UnionFind {
   constructor(items) {
@@ -42,7 +47,8 @@ export function createComponentState(definition, ambientTemperatureC = 20) {
     temperatureC: ambientTemperatureC,
     currentAmps: 0,
     powerWatts: 0,
-    heatWatts: 0
+    heatWatts: 0,
+    onFire: false
   };
   if (definition.model.type !== "battery") return state;
   const stateOfCharge = definition.model.startingStateOfCharge ?? 0.8;
@@ -120,6 +126,7 @@ export function createWireState(catalog, components, wire, ambientTemperatureC =
     currentAmps: 0,
     powerWatts: 0,
     heatWatts: 0,
+    onFire: false,
     ...wirePhysicalProperties(catalog, components, wire)
   };
 }
@@ -182,60 +189,17 @@ function wiresOnNets(wires, netIds, netlist) {
   });
 }
 
-function addWireCurrent(wireCurrents, wires, currentAmps) {
-  for (const wire of wires) {
-    wireCurrents.set(wire.id, (wireCurrents.get(wire.id) ?? 0) + currentAmps);
-  }
-}
-
-function wireConnects(wire, first, second) {
-  return (
-    endpointKey(wire.from) === endpointKey(first) &&
-    endpointKey(wire.to) === endpointKey(second)
-  ) || (
-    endpointKey(wire.from) === endpointKey(second) &&
-    endpointKey(wire.to) === endpointKey(first)
-  );
-}
-
-function directWire(wires, first, second) {
-  return wires.find((wire) => wireConnects(wire, first, second));
-}
-
-function totalWireResistance(wires, physicalWires) {
-  return wires.reduce(
-    (total, wire) => total + physicalWires.get(wire.id).resistanceOhms,
-    0
-  );
-}
-
-function evaluateLegacyCircuit({ catalog, components, wires }) {
+function evaluateStaticCircuit({ catalog, components, wires }) {
   const definitions = catalogMap(catalog);
   const netlist = buildNetlist(catalog, components, wires);
   const hazards = [];
-  const currents = new Map();
-  const wireCurrents = new Map(wires.map((wire) => [wire.id, 0]));
-  const componentMetrics = new Map();
-  const wireMetrics = new Map();
-  const operatingInverters = new Set();
-  const operatingLoads = new Set();
-  const physicalWires = new Map(
-    wires.map((wire) => [wire.id, wirePhysicalProperties(catalog, components, wire)])
-  );
   const batteries = [];
   const inverters = [];
-  const loads = [];
 
   for (const component of components) {
     const definition = definitions.get(component.componentId);
-    componentMetrics.set(component.id, {
-      currentAmps: 0,
-      powerWatts: 0,
-      heatWatts: 0
-    });
     if (definition?.model.type === "battery") batteries.push({ component, definition });
     if (definition?.model.type === "inverter") inverters.push({ component, definition });
-    if (definition?.model.type === "load") loads.push({ component, definition });
   }
 
   for (const net of netlist.nets) {
@@ -252,107 +216,9 @@ function evaluateLegacyCircuit({ catalog, components, wires }) {
     }
   }
 
-  const sourceLoopCurrents = new Map();
-  const batteriesInLoops = new Set();
-  for (let firstIndex = 0; firstIndex < batteries.length; firstIndex += 1) {
-    for (let secondIndex = firstIndex + 1; secondIndex < batteries.length; secondIndex += 1) {
-      const first = batteries[firstIndex];
-      const second = batteries[secondIndex];
-      if (
-        batteriesInLoops.has(first.component.id) ||
-        batteriesInLoops.has(second.component.id)
-      ) continue;
-      const firstPositive = terminalNet(netlist, first.component.id, first.definition, "dc-positive");
-      const firstNegative = terminalNet(netlist, first.component.id, first.definition, "dc-negative");
-      const secondPositive = terminalNet(netlist, second.component.id, second.definition, "dc-positive");
-      const secondNegative = terminalNet(netlist, second.component.id, second.definition, "dc-negative");
-      const isClosedCrossLoop =
-        firstPositive !== firstNegative &&
-        firstPositive === secondNegative &&
-        firstNegative === secondPositive;
-      const bothEnergized =
-        (first.component.state?.energyWh ?? 0) > 0 &&
-        (second.component.state?.energyWh ?? 0) > 0;
-      const firstPositiveTerminal = first.definition.terminals.find(
-        ({ role }) => role === "dc-positive"
-      );
-      const firstNegativeTerminal = first.definition.terminals.find(
-        ({ role }) => role === "dc-negative"
-      );
-      const secondPositiveTerminal = second.definition.terminals.find(
-        ({ role }) => role === "dc-positive"
-      );
-      const secondNegativeTerminal = second.definition.terminals.find(
-        ({ role }) => role === "dc-negative"
-      );
-      const positiveCrossWire = directWire(
-        wires,
-        { componentId: first.component.id, terminalId: firstPositiveTerminal.id },
-        { componentId: second.component.id, terminalId: secondNegativeTerminal.id }
-      );
-      const negativeCrossWire = directWire(
-        wires,
-        { componentId: first.component.id, terminalId: firstNegativeTerminal.id },
-        { componentId: second.component.id, terminalId: secondPositiveTerminal.id }
-      );
-      if (
-        !isClosedCrossLoop ||
-        !bothEnergized ||
-        !positiveCrossWire ||
-        !negativeCrossWire
-      ) continue;
-
-      const loopWires = [positiveCrossWire, negativeCrossWire];
-      const wireResistance = totalWireResistance(loopWires, physicalWires);
-      const totalResistance =
-        first.definition.model.internalResistanceOhms +
-        second.definition.model.internalResistanceOhms +
-        wireResistance;
-      const currentAmps =
-        (first.definition.model.voltage + second.definition.model.voltage) /
-        Math.max(totalResistance, EPSILON);
-
-      sourceLoopCurrents.set(
-        first.component.id,
-        (sourceLoopCurrents.get(first.component.id) ?? 0) + currentAmps
-      );
-      batteriesInLoops.add(first.component.id);
-      batteriesInLoops.add(second.component.id);
-      sourceLoopCurrents.set(
-        second.component.id,
-        (sourceLoopCurrents.get(second.component.id) ?? 0) + currentAmps
-      );
-      addWireCurrent(wireCurrents, loopWires, currentAmps);
-      addHazard(
-        hazards,
-        "battery-loop-short",
-        `${first.definition.name} and ${second.definition.name} form a closed source loop.`,
-        [first.component.id, second.component.id],
-        loopWires.map(({ id }) => id)
-      );
-    }
-  }
-
   for (const { component: battery, definition: batteryDefinition } of batteries) {
     const positiveNet = terminalNet(netlist, battery.id, batteryDefinition, "dc-positive");
     const negativeNet = terminalNet(netlist, battery.id, batteryDefinition, "dc-negative");
-    let currentAmps = sourceLoopCurrents.get(battery.id) ?? 0;
-
-    if (positiveNet === negativeNet && (battery.state?.energyWh ?? 0) > 0) {
-      const shortWires = wiresOnNets(wires, [positiveNet], netlist);
-      const wireResistance = totalWireResistance(shortWires, physicalWires);
-      const shortCurrent = batteryDefinition.model.voltage /
-        Math.max(batteryDefinition.model.internalResistanceOhms + wireResistance, EPSILON);
-      currentAmps += shortCurrent;
-      addWireCurrent(wireCurrents, shortWires, shortCurrent);
-      addHazard(
-        hazards,
-        "dc-short",
-        `${batteryDefinition.name} is short-circuited.`,
-        [battery.id],
-        shortWires.map(({ id }) => id)
-      );
-    }
 
     for (const { component: inverter, definition: inverterDefinition } of inverters) {
       const inverterPositive = terminalNet(netlist, inverter.id, inverterDefinition, "dc-positive");
@@ -385,81 +251,11 @@ function evaluateLegacyCircuit({ catalog, components, wires }) {
           [battery.id, inverter.id],
           wiresOnNets(wires, [positiveNet, negativeNet], netlist).map(({ id }) => id)
         );
-        continue;
-      }
-      if ((battery.state?.energyWh ?? 0) <= 0) continue;
-
-      const acLineNet = terminalNet(netlist, inverter.id, inverterDefinition, "ac-line");
-      const acNeutralNet = terminalNet(netlist, inverter.id, inverterDefinition, "ac-neutral");
-      const attachedLoads = loads.filter(({ component: load, definition: loadDefinition }) =>
-        acLineNet !== acNeutralNet &&
-        terminalNet(netlist, load.id, loadDefinition, "ac-line") === acLineNet &&
-        terminalNet(netlist, load.id, loadDefinition, "ac-neutral") === acNeutralNet
-      );
-      const outputWatts = attachedLoads.reduce((total, { definition }) => total + definition.model.powerWatts, 0);
-      const inputWatts = inverterDefinition.model.idleDrawWatts +
-        outputWatts / inverterDefinition.model.efficiency;
-      const inverterCurrent = inputWatts / batteryDefinition.model.voltage;
-      currentAmps += inverterCurrent;
-      operatingInverters.add(inverter.id);
-      componentMetrics.set(inverter.id, {
-        currentAmps: inverterCurrent,
-        powerWatts: inputWatts,
-        heatWatts: inverterDefinition.model.idleDrawWatts +
-          outputWatts * (1 / inverterDefinition.model.efficiency - 1)
-      });
-
-      const dcWires = wiresOnNets(wires, [positiveNet, negativeNet], netlist);
-      addWireCurrent(wireCurrents, dcWires, inverterCurrent);
-
-      for (const { component: load, definition: loadDefinition } of attachedLoads) {
-        const loadCurrent = loadDefinition.model.powerWatts / loadDefinition.model.voltage;
-        componentMetrics.set(load.id, {
-          currentAmps: loadCurrent,
-          powerWatts: loadDefinition.model.powerWatts,
-          heatWatts: loadDefinition.model.powerWatts
-        });
-        operatingLoads.add(load.id);
-        const loadLineNet = terminalNet(netlist, load.id, loadDefinition, "ac-line");
-        const loadNeutralNet = terminalNet(netlist, load.id, loadDefinition, "ac-neutral");
-        addWireCurrent(
-          wireCurrents,
-          wiresOnNets(wires, [loadLineNet, loadNeutralNet], netlist),
-          loadCurrent
-        );
       }
     }
-
-    currents.set(battery.id, currentAmps);
-    componentMetrics.set(battery.id, {
-      currentAmps,
-      powerWatts: currentAmps * batteryDefinition.model.voltage,
-      heatWatts: currentAmps ** 2 * batteryDefinition.model.internalResistanceOhms
-    });
   }
 
-  for (const wire of wires) {
-    const physical = physicalWires.get(wire.id);
-    const currentAmps = wireCurrents.get(wire.id) ?? 0;
-    const heatWatts = currentAmps ** 2 * physical.resistanceOhms;
-    wireMetrics.set(wire.id, {
-      ...physical,
-      currentAmps,
-      powerWatts: heatWatts,
-      heatWatts
-    });
-  }
-
-  return {
-    netlist,
-    hazards,
-    currents,
-    wireCurrents,
-    componentMetrics,
-    wireMetrics,
-    operatingInverters,
-    operatingLoads
-  };
+  return { netlist, hazards };
 }
 
 function interpolateBatteryVoltage(definition, stateOfCharge) {
@@ -570,6 +366,79 @@ function branchCurrent(branch, voltages) {
     Math.max(branch.resistanceOhms, EPSILON);
 }
 
+function addSolvedDcHazards({
+  hazards,
+  netlist,
+  wires,
+  componentMetrics,
+  wireCurrents,
+  definitions,
+  instances
+}) {
+  const wiresById = new Map(wires.map((wire) => [wire.id, wire]));
+  const energizedWireIdsByNet = new Map();
+  for (const [wireId, currentAmps] of wireCurrents) {
+    if (Math.abs(currentAmps) <= EPSILON) continue;
+    const wire = wiresById.get(wireId);
+    const net = netlist.terminalToNet.get(endpointKey(wire.from));
+    if (!energizedWireIdsByNet.has(net)) energizedWireIdsByNet.set(net, []);
+    energizedWireIdsByNet.get(net).push(wireId);
+  }
+
+  const directShorts = new Map();
+  const sourcePairs = new Map();
+  for (const [componentId, metrics] of componentMetrics) {
+    const instance = instances.get(componentId);
+    const definition = definitions.get(instance?.componentId);
+    if (definition?.model.type !== "battery" || Math.abs(metrics.currentAmps) <= EPSILON) continue;
+    const positiveNet = terminalNet(netlist, componentId, definition, "dc-positive");
+    const negativeNet = terminalNet(netlist, componentId, definition, "dc-negative");
+    if (positiveNet === negativeNet) {
+      if (!directShorts.has(positiveNet)) directShorts.set(positiveNet, []);
+      directShorts.get(positiveNet).push(componentId);
+      continue;
+    }
+
+    const nets = [positiveNet, negativeNet].sort();
+    const key = nets.join("::");
+    if (!sourcePairs.has(key)) {
+      sourcePairs.set(key, { nets, forward: [], reverse: [] });
+    }
+    const direction = positiveNet === nets[0] ? "forward" : "reverse";
+    sourcePairs.get(key)[direction].push(componentId);
+  }
+
+  for (const [net, componentIds] of directShorts) {
+    const wireIds = energizedWireIdsByNet.get(net) ?? [];
+    for (const componentId of componentIds) {
+      const definition = definitions.get(instances.get(componentId).componentId);
+      addHazard(
+        hazards,
+        "dc-short",
+        `${definition.name} is short-circuited.`,
+        [componentId],
+        wireIds
+      );
+    }
+  }
+
+  for (const { nets, forward, reverse } of sourcePairs.values()) {
+    if (!forward.length || !reverse.length) continue;
+    const componentIds = [...forward, ...reverse];
+    const names = componentIds.map((id) =>
+      definitions.get(instances.get(id).componentId).name
+    );
+    const wireIds = nets.flatMap((net) => energizedWireIdsByNet.get(net) ?? []);
+    addHazard(
+      hazards,
+      "battery-loop-short",
+      `${names.join(" and ")} form a closed high-current source loop.`,
+      componentIds,
+      wireIds
+    );
+  }
+}
+
 function wireBranch(catalog, components, wire) {
   const physical = wirePhysicalProperties(catalog, components, wire);
   return {
@@ -584,7 +453,7 @@ function wireBranch(catalog, components, wire) {
 
 export function evaluateCircuit(snapshot) {
   const { catalog, components, wires } = snapshot;
-  const legacy = evaluateLegacyCircuit(snapshot);
+  const staticCircuit = evaluateStaticCircuit(snapshot);
   const definitions = catalogMap(catalog);
   const componentMetrics = new Map(
     components.map(({ id }) => [id, { currentAmps: 0, powerWatts: 0, heatWatts: 0 }])
@@ -867,9 +736,19 @@ export function evaluateCircuit(snapshot) {
     });
   }
 
+  addSolvedDcHazards({
+    hazards: staticCircuit.hazards,
+    netlist: staticCircuit.netlist,
+    wires,
+    componentMetrics,
+    wireCurrents,
+    definitions,
+    instances
+  });
+
   return {
-    netlist: legacy.netlist,
-    hazards: legacy.hazards,
+    netlist: staticCircuit.netlist,
+    hazards: staticCircuit.hazards,
     currents,
     wireCurrents,
     componentMetrics,
@@ -973,18 +852,23 @@ export function simulateTick(snapshot, minutesPerTick = 1) {
       powerWatts: 0,
       heatWatts: 0
     };
+    const temperatureC = calculateTemperature({
+      previousTemperatureC: previousState.temperatureC,
+      ambientTemperatureC,
+      heatWatts: metrics.heatWatts,
+      massKg: definition.model.massKg,
+      specificHeatJPerKgC: definition.model.specificHeatJPerKgC,
+      minutes: safeMinutes,
+      coolingCoefficientPerMinute
+    });
     const nextState = {
       ...previousState,
       ...metrics,
-      temperatureC: calculateTemperature({
-        previousTemperatureC: previousState.temperatureC,
-        ambientTemperatureC,
-        heatWatts: metrics.heatWatts,
-        massKg: definition.model.massKg,
-        specificHeatJPerKgC: definition.model.specificHeatJPerKgC,
-        minutes: safeMinutes,
-        coolingCoefficientPerMinute
-      })
+      temperatureC,
+      onFire: definition.model.type !== "load" && (
+        isFireActive(previousState) ||
+        temperatureC > FIRE_TEMPERATURE_C
+      )
     };
 
     if (definition.model.type === "battery") {
@@ -1004,20 +888,23 @@ export function simulateTick(snapshot, minutesPerTick = 1) {
       ...wire.state
     };
     const metrics = result.wireMetrics.get(wire.id);
+    const temperatureC = calculateTemperature({
+      previousTemperatureC: previousState.temperatureC,
+      ambientTemperatureC,
+      heatWatts: metrics.heatWatts,
+      massKg: metrics.massKg,
+      specificHeatJPerKgC: snapshot.catalog.wire.model.specificHeatJPerKgC,
+      minutes: safeMinutes,
+      coolingCoefficientPerMinute
+    });
     return {
       ...wire,
       state: {
         ...previousState,
         ...metrics,
-        temperatureC: calculateTemperature({
-          previousTemperatureC: previousState.temperatureC,
-          ambientTemperatureC,
-          heatWatts: metrics.heatWatts,
-          massKg: metrics.massKg,
-          specificHeatJPerKgC: snapshot.catalog.wire.model.specificHeatJPerKgC,
-          minutes: safeMinutes,
-          coolingCoefficientPerMinute
-        })
+        temperatureC,
+        onFire: isFireActive(previousState) ||
+          temperatureC > FIRE_TEMPERATURE_C
       }
     };
   });
