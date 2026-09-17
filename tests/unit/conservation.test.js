@@ -69,15 +69,20 @@ test("battery charge is accounted for coulomb by coulomb", () => {
   );
   const battery = world.device("bat");
   const start = battery.state.stateOfCharge;
-  world.advanceMinutes(60);
+  // Integrate the current the way a shunt meter would, in one-minute slices, because the draw
+  // falls as the pack sags.
+  let integratedCoulombs = 0;
+  for (let minute = 0; minute < 60; minute += 1) {
+    world.advanceMinutes(1);
+    integratedCoulombs += Math.abs(world.measure("bat").currentAmps) * 60;
+  }
 
   const measured = world.measure("bat");
-  const capacityCoulombs = measured.capacityAh * 3600;
-  const drawnCoulombs = (start - battery.state.stateOfCharge) * capacityCoulombs;
+  const drawnCoulombs = (start - battery.state.stateOfCharge) * measured.nominalCapacityAh * 3600;
   // An 8 A draw for an hour is about 29 kC. The point is that the coulombs removed match the
   // current that flowed, which is what checkChargeConservation enforces every step.
-  const amps = Math.abs(measured.currentAmps);
-  closeTo(drawnCoulombs, amps * 3600, 0.02, "coulombs removed vs current integral: ");
+  closeTo(drawnCoulombs, integratedCoulombs, 0.01, "coulombs removed vs current integral: ");
+  assert.ok(drawnCoulombs > 25000, `only ${drawnCoulombs} C`);
 });
 
 test("the conservation check catches a device that invents heat", () => {

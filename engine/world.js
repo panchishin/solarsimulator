@@ -151,7 +151,11 @@ export class World {
     device.thermalThresholds = device.thermalNodes.map((node) => ({
       name: node.name,
       ignitionTemperatureC: ignitionTemperatureC(node.material),
-      failureTemperatureC: failureTemperatureC(node.material),
+      // A node marked non-structural still ignites and still burns; it just does not disable the
+      // device by softening. A conductor's insulation is the case: melted insulation is a fire
+      // and a short-circuit risk, not an open circuit, and the conductor keeps carrying current
+      // until it either ignites its own insulation or melts.
+      failureTemperatureC: node.structural === false ? null : failureTemperatureC(node.material),
       combustibleMassKg: heatOfCombustionJPerKg(node.material) > 0 ? node.massKg : 0
     }));
     device.combustibleMassKg = device.thermalThresholds.reduce(
@@ -314,7 +318,7 @@ export class World {
       const amps = device.portCurrents.get("positive") ?? 0;
       chargeBefore.set(device.id, {
         stateOfCharge: device.state.stateOfCharge,
-        capacityAh: device.usableCapacityAh(device.thermal.temperature("cell")),
+        capacityAh: device.nominalCapacityAh(),
         effectiveAmps:
           amps >= 0 ? device.electrical.coulombicEfficiency * amps : amps
       });

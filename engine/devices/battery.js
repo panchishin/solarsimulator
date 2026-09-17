@@ -23,6 +23,8 @@ export function createBatteryDevice({ base, catalog }) {
       capacityFade: 0,
       throughputAh: 0,
       overCurrentDamage: 0,
+      protectionCondition: null,
+      protectionElapsedSeconds: 0,
       reconnectAtSeconds: -Infinity,
       runaway: false,
       burnedMassKg: 0,
@@ -39,10 +41,19 @@ export function createBatteryDevice({ base, catalog }) {
       );
     },
 
+    /**
+     * Capacity that state of charge is referenced to, Ah. Rated capacity less permanent fade,
+     * with no temperature term: a cold pack delivers less energy, but sitting in the cold does
+     * not move any charge, so it must not move the state of charge either.
+     */
+    nominalCapacityAh() {
+      return electrical.capacityAh * (1 - this.state.capacityFade);
+    },
+
+    /** Capacity actually deliverable at this temperature, Ah. */
     usableCapacityAh(temperatureC) {
       return (
-        electrical.capacityAh *
-        (1 - this.state.capacityFade) *
+        this.nominalCapacityAh() *
         temperatureFactor(electrical.capacityTemperatureFactors, temperatureC)
       );
     },
@@ -72,27 +83,29 @@ export function createBatteryDevice({ base, catalog }) {
       ctx.thevenin("positive", "negative", this.openCircuitVoltage(), resistance);
     },
 
+    /**
+     * The protection condition present at this operating point, or null. Reported rather than
+     * acted on: the contactor opens only after the condition has held for the BMS's response
+     * time, which is what lets a fuse clear a bolted fault before the pack disconnects.
+     */
+    protectionCondition(ctx) {
+      const cellC = ctx.temperature("cell");
+      const terminalVolts = ctx.across("positive", "negative");
+      const amps = this.portCurrents.get("positive") ?? 0;
+      if (terminalVolts >= limits.overVoltageDisconnect) return "pack over-voltage";
+      if (terminalVolts <= limits.underVoltageDisconnect) return "pack under-voltage";
+      if (cellC >= limits.highTemperatureDisconnectC) return "cell over-temperature";
+      if (amps > 0 && cellC <= limits.chargeLowTemperatureDisconnectC) {
+        return "charging below the low-temperature limit";
+      }
+      return null;
+    },
+
     limits(ctx) {
       if (isOpen(this)) return "open";
       const cellC = ctx.temperature("cell");
       const now = ctx.timeSeconds;
-      const terminalVolts = ctx.across("positive", "negative");
-      const amps = this.portCurrents.get("positive") ?? 0;
-
-      if (this.mode === "closed") {
-        const reasons = [
-          terminalVolts >= limits.overVoltageDisconnect,
-          terminalVolts <= limits.underVoltageDisconnect,
-          cellC >= limits.highTemperatureDisconnectC,
-          amps > 0 && cellC <= limits.chargeLowTemperatureDisconnectC,
-          this.state.overCurrentDamage >= 1
-        ];
-        if (reasons.some(Boolean)) {
-          this.state.reconnectAtSeconds = now + (limits.reconnectDelaySeconds ?? 60);
-          return "open";
-        }
-        return "closed";
-      }
+      if (this.mode === "closed") return "closed";
 
       const openCircuit = this.openCircuitVoltage();
       const recovered =
@@ -130,7 +143,7 @@ export function createBatteryDevice({ base, catalog }) {
     advance(ctx, dt) {
       const amps = this.portCurrents.get("positive") ?? 0;
       const cellC = ctx.temperature("cell");
-      const capacityAh = Math.max(this.usableCapacityAh(cellC), 1e-9);
+      const capacityAh = Math.max(this.nominalCapacityAh(), 1e-9);
       const effective = amps >= 0 ? electrical.coulombicEfficiency * amps : amps;
       this.state.stateOfCharge = clamp(
         this.state.stateOfCharge + (effective * dt) / (SECONDS_PER_HOUR * capacityAh),
@@ -156,21 +169,43 @@ export function createBatteryDevice({ base, catalog }) {
         dt
       });
       if (cellC >= cellMaterial.runawayOnsetTemperatureC) this.state.runaway = true;
+
+      const condition = this.mode === "closed" ? this.protectionCondition(ctx) : null;
+      if (condition) {
+        this.state.protectionCondition = condition;
+        this.state.protectionElapsedSeconds += dt;
+      } else {
+        this.state.protectionCondition = null;
+        this.state.protectionElapsedSeconds = 0;
+      }
       this.state.lastAdvanceSeconds = ctx.timeSeconds;
     },
 
     events(ctx) {
-      return [
+      const response = limits.protectionResponseSeconds;
+      const events = [
         { id: "bms-overcurrent", value: this.state.overCurrentDamage - 1 },
         {
           id: "runaway-onset",
           value: ctx.temperature("cell") - cellMaterial.runawayOnsetTemperatureC
         }
       ];
+      if (this.mode === "closed") {
+        const holding = this.protectionCondition(ctx) !== null;
+        events.push({
+          id: "bms-disconnect",
+          value: holding ? this.state.protectionElapsedSeconds - response : -response
+        });
+      }
+      return events;
     },
 
-    onEvent(id) {
-      if (id === "bms-overcurrent") this.mode = "open";
+    onEvent(id, ctx) {
+      if (id === "bms-overcurrent" || id === "bms-disconnect") {
+        this.mode = "open";
+        this.state.reconnectAtSeconds = ctx.timeSeconds + (limits.reconnectDelaySeconds ?? 60);
+        this.state.protectionElapsedSeconds = 0;
+      }
       if (id === "runaway-onset") this.state.runaway = true;
     },
 
@@ -184,12 +219,16 @@ export function createBatteryDevice({ base, catalog }) {
         stateOfCharge: this.state.stateOfCharge,
         energyWh: this.state.stateOfCharge * this.usableCapacityAh(cellC) * electrical.nominalVoltage,
         capacityAh: this.usableCapacityAh(cellC),
+        // State of charge is a fraction of the nominal capacity, not of the temperature-derated
+        // usable capacity, so anything counting coulombs has to use this one.
+        nominalCapacityAh: this.nominalCapacityAh(),
         capacityFade: this.state.capacityFade,
         powerWatts: ctx.across("positive", "negative") * amps,
         heatWatts: this.heat(ctx).cell,
         cellTemperatureC: cellC,
         caseTemperatureC: ctx.temperature("case"),
         contactorClosed: this.mode === "closed" && !isOpen(this),
+        protectionCondition: this.state.protectionCondition,
         runaway: this.state.runaway,
         failure: this.failure
       };

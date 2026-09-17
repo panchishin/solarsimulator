@@ -204,7 +204,7 @@ test("an inverter with its DC input left floating simply does not run", () => {
   assert.ok(Math.abs(world.measure("bat").currentAmps) < 1e-6);
 });
 
-test("miswiring the AC output onto the DC bus trips the battery's BMS", () => {
+test("miswiring the AC output onto the DC bus stops the inverter from starting", () => {
   const world = layoutBuilder()
     .place("bat", BATTERY, 0, 0)
     .place("inv", "inverter-12v-1000w", 8, 0)
@@ -218,14 +218,19 @@ test("miswiring the AC output onto the DC bus trips the battery's BMS", () => {
   world.solveNow();
 
   // Nothing in the code looks for this wiring mistake, and no rule says what should happen.
-  // The 120 V output stage back-feeds the 13 V bus through its own output impedance, the
-  // resulting charge current is far past what the BMS allows, so the pack disconnects; the bus
-  // then collapses and the inverter trips on DC under-voltage. Every step is a device
-  // protecting itself at the solved operating point.
-  assert.equal(world.measure("bat").contactorClosed, false);
+  // What the solve finds is that energising a 120 V output stage onto the node feeding its own
+  // 13 V input collapses that input, so the inverter's own under-voltage protection holds it
+  // off: it never runs, and the pack is never asked for current. The mistake shows up as a
+  // hazard and as an inverter that will not start, not as a fault current.
+  world.advance(5);
+  assert.equal(world.measure("inv").operating, false);
   assert.equal(world.measure("inv").tripReason, "dc-under-voltage");
+  assert.equal(world.measure("inv").outputWatts, 0);
+  assert.ok(Math.abs(world.measure("bat").currentAmps) < 1e-6);
+  assert.equal(world.measure("bat").contactorClosed, true, "the pack was never over-stressed");
+
   const types = world.hazards().map((hazard) => hazard.type);
-  assert.ok(types.includes("bms-disconnect"), types.join(", "));
+  assert.ok(types.includes("inverter-trip"), types.join(", "));
   assert.ok(types.includes("mixed-domain"), types.join(", "));
 });
 

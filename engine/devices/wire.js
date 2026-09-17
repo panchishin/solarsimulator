@@ -58,6 +58,9 @@ export function createWireDevice({ catalog, wire, componentsById, settings }) {
         name: "insulation",
         material: insulationMaterial,
         massKg: insulationMassKg,
+        // Softening insulation does not open the circuit; it takes ignition or a molten
+        // conductor to do that.
+        structural: false,
         surface: {
           geometry: "horizontalCylinder",
           areaM2: Math.PI * outerDiameterM * lengthM,
