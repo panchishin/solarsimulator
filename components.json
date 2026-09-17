@@ -151,7 +151,7 @@
       "group": "inverter",
       "name": "12V 3kW Inverter",
       "description": "Converts 12 volt battery power to 120 volt AC power.",
-      "gridSize": { "width": 5, "height": 4 },
+      "gridSize": { "width": 5, "height": 3 },
       "specifications": {
         "DC input": "12 V DC",
         "AC output": "120 V / 60 Hz",
@@ -183,7 +183,7 @@
       "group": "inverter",
       "name": "12V 1kW Inverter",
       "description": "A compact 12 volt inverter for lighter AC loads.",
-      "gridSize": { "width": 5, "height": 4 },
+      "gridSize": { "width": 5, "height": 3 },
       "specifications": {
         "DC input": "12 V DC",
         "AC output": "120 V / 60 Hz",
@@ -215,7 +215,7 @@
       "group": "inverter",
       "name": "48V 3kW Inverter",
       "description": "A 48 volt inverter for medium home power systems.",
-      "gridSize": { "width": 5, "height": 4 },
+      "gridSize": { "width": 5, "height": 3 },
       "specifications": {
         "DC input": "48 V DC",
         "AC output": "120 V / 60 Hz",
@@ -247,7 +247,7 @@
       "group": "inverter",
       "name": "48V 5kW Inverter",
       "description": "A 48 volt inverter for larger household loads.",
-      "gridSize": { "width": 5, "height": 4 },
+      "gridSize": { "width": 5, "height": 3 },
       "specifications": {
         "DC input": "48 V DC",
         "AC output": "120 V / 60 Hz",
@@ -360,7 +360,7 @@
       "group": "load",
       "name": "400W Fridge",
       "description": "A simplified continuous 400 watt refrigerator load.",
-      "gridSize": { "width": 5, "height": 4 },
+      "gridSize": { "width": 5, "height": 3 },
       "specifications": {
         "Supply": "120 V AC",
         "Power": "400 W continuous equivalent",
