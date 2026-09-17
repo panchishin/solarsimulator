@@ -567,3 +567,11 @@ Discrete transitions are event functions `g(state)` that a device declares. A st
 if any `g` changes sign, and the crossing is bisected to `eventToleranceSeconds` before the
 transition is applied. That is why a bolted fault clears in milliseconds inside a simulation
 that otherwise runs on minute-long steps.
+
+A step is also rejected when Newton fails to converge at all. The previous step's solution is
+where the next one starts, so a shorter step starts nearer the answer it has to find, and halving
+is the standard remedy (ref:vlach-singhal section 7.4). The failure is only reported once the step
+is already at `minStepSeconds`, which makes a genuine convergence failure a statement about the
+circuit rather than about the step size. In practice this is what carries a system through a
+moment when two stiff regulators change hands inside one minute: a full pack that has stopped
+accepting charge, an MPPT still pushing into it, and a compressor starting.
