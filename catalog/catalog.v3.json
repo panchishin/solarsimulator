@@ -1553,7 +1553,7 @@
       }
     },
     {
-      "id": "load-fridge-120w",
+      "id": "load-fridge-400w",
       "group": "load",
       "name": "Refrigerator",
       "shortName": "Fridge",
@@ -1561,10 +1561,10 @@
       "gridSize": { "width": 5, "height": 4 },
       "specifications": {
         "Supply": "120 V AC (min 100 V)",
-        "Running power": "120 W",
+        "Running power": "400 W",
         "Duty cycle": "35 %",
         "Inrush": "6 × for 0.4 s",
-        "Daily energy": "≈ 1.0 kWh",
+        "Daily energy": "≈ 3.0 kWh",
         "Mass": "50 kg"
       },
       "terminals": [
