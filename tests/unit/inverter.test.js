@@ -58,7 +58,7 @@ test("efficiency rises with load, and never beats the conversion curve", () => {
   const cases = [
     { id: "load-led-10w", label: "10 W LED" },
     { id: "load-incandescent-100w", label: "100 W lamp" },
-    { id: "load-fridge-120w", label: "120 W fridge" },
+    { id: "load-fridge-400w", label: "400 W fridge" },
     // 1,500 W on a 1,000 W inverter, measured before the overload trip catches up with it.
     { id: "load-hair-dryer-1500w", label: "1500 W dryer", seconds: 20 }
   ];
@@ -190,7 +190,7 @@ test("an overload trips on the datasheet curve, then hiccups against its own loc
 test("a heatsink above the derate threshold makes a legal load an overload", () => {
   // Same inverter, same load, 60 C ambient. The rating falls linearly from derateStartC to zero
   // at derateEndC, so 1,000 W of hardware is a 500 W inverter here.
-  const hot = bench({ acLoad: "load-fridge-120w", packs: 2, ambientC: 60 });
+  const hot = bench({ acLoad: "load-fridge-400w", packs: 2, ambientC: 60 });
   hot.stepFixed(0.5);
   const derated = hot.measure("inv");
   const span = definition.limits.derateEndC - definition.limits.derateStartC;

@@ -96,7 +96,7 @@ const DEFAULT_LAYOUT = {
     { id: "controller", part: "controller-mppt-100a", grid: [7, 5], indoors: true },
     { id: "pack", part: "battery-lifepo4-48v-100ah-golf", grid: [7, 10], indoors: true },
     { id: "inverter", part: "inverter-48v-2500w", grid: [14, 5], indoors: true },
-    { id: "fridge", part: "load-fridge-120w", grid: [21, 10], indoors: true },
+    { id: "fridge", part: "load-fridge-400w", grid: [21, 10], indoors: true },
     { id: "lamp-1", part: "load-led-10w", grid: [21, 1], indoors: true },
     { id: "lamp-2", part: "load-led-10w", grid: [21, 5], indoors: true }
   ],

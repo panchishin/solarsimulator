@@ -270,7 +270,7 @@ published 15, and 0.06 s against a published 0.1 s. `thermal.test.js` separately
 filament reaches colour temperature with a cool envelope, which is the spectral split doing its
 job.
 
-`energystar-fridge` supplies `load-fridge-120w`, which several `inverter.test.js` tests use as an
+`energystar-fridge` supplies `load-fridge-400w`, which several `inverter.test.js` tests use as an
 AC load. The published run-time fraction and the locked-rotor inrush multiple are not compared
 against anything; the load is there to be a constant-power machine on a sagging bus. The two DC
 appliances, `secop-bd35f` and `shurflo-4008`, are catalogued and unexercised.
