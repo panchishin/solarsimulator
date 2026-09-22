@@ -78,14 +78,15 @@ Keyed by gauge name (`"14"`, `"1/0"`, `"4/0"`). Each entry:
   "areaMm2": 5.26,
   "conductorDiameterMm": 2.59,
   "ampacityFreeAir60CAmps": 40,
-  "ampacityFreeAir75CAmps": 50,
-  "ampacityRaceway75CAmps": 35
+  "ampacityFreeAir75CAmps": 50
 }
 ```
 
 Ampacities are reference values used by `validation/`, not by the engine: the engine derives
 the steady temperature from the thermal solve and the validation harness compares it against
-the table.
+the table. Only the free-air columns are carried, because still air around a single conductor
+is the geometry the thermal model solves; a raceway column would have nothing to compare
+against.
 
 ## `wires`
 
@@ -128,6 +129,13 @@ are conventional:
 - `electrical` — everything the `stamp` pass needs.
 - `limits` — thresholds the `limits`/`events` passes compare against (trip curves, cutoffs,
   ratings, damage and ignition thresholds).
+
+  A device that derates declares `derateStartC`, `derateEndC`, `derateFloorFraction` and
+  `shutdownC` together. The rating tapers from full at `derateStartC` to `derateFloorFraction` of
+  nameplate at `derateEndC`, and the device turns off at `shutdownC`. The floor must be above zero
+  whenever `shutdownC` is above `derateEndC`, or the rating reaches zero while the device is still
+  running and the inverse-time overload trip pre-empts the thermal shutdown. `inverter.test.js`
+  enforces that pairing for every component that derates.
 - `thermal` — the device's lumped network:
 
 ```json
@@ -157,7 +165,7 @@ and only relevant for devices whose `heat()` splits dissipation across nodes by 
 | `battery` | `nominalVoltage`, `capacityAh`, `startingStateOfCharge`, `internalResistanceOhms`, `openCircuitVoltageCurve` (SoC→V), `coulombicEfficiency`, `resistanceTemperatureFactors`, `capacityTemperatureFactors` |
 | `pv` | `cellsInSeries`, `substrings`, `diodeIdeality`, STC point (`shortCircuitCurrentAmps`, `openCircuitVoltage`, `maxPowerVoltage`, `maxPowerCurrentAmps`), `iscTempCoefficientPerC`, `vocTempCoefficientPerC`, `bypassDiode`, `optical` (`areaM2`, `absorptance`, Faiman `u0`,`u1`) |
 | `chargeController` | `topology` (`mppt`\|`pwm`), `efficiencyCurve` or `voltageDropVolts`, `maxChargeCurrentAmps`, `maxInputVoltage`, `idleDrawWatts`, `stages` (`absorbVoltage`, `floatVoltage`, `absorbHoldSeconds`, `tailCurrentFraction`) |
-| `inverter` | `nominalInputVoltage`, `outputVoltage`, `outputFrequencyHz`, `continuousOutputWatts`, `idleDrawWatts`, `efficiencyCurve` (load fraction→η), `efficiencyTempCoefficientPerC`, `outputResistanceOhms`, `bodyDiode` |
+| `inverter` | `nominalInputVoltage`, `outputVoltage`, `continuousOutputWatts`, `idleDrawWatts`, `efficiencyCurve` (load fraction→η), `efficiencyTempCoefficientPerC`, `outputResistanceOhms`, `bodyDiode` |
 | `load` | `behaviour` (`constantPower`\|`constantResistance`\|`incandescent`\|`compressor`), `ratedVoltage`, `ratedPowerWatts`, plus behaviour-specific keys (`dutyCycle`, `inrushMultiple`, `inrushSeconds`, `filament`) |
 | `fuse` | `ratedAmps`, `coldResistanceOhms`, `timeCurrentCurve` |
 | `breaker` | `ratedAmps`, `coldResistanceOhms`, `timeCurrentCurve`, `magneticMultiple`, `magneticTripSeconds` |

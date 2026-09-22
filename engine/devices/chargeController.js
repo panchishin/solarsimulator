@@ -52,10 +52,17 @@ export function createChargeControllerDevice({ base }) {
       return this.state.stage === STAGE_FLOAT ? float : absorb;
     },
 
+    /**
+     * Charge current limit after thermal derate, A. The taper stops at `derateFloorFraction`:
+     * a hot controller throttles its charge current but keeps delivering until it shuts down,
+     * and a limit of zero below `shutdownC` would stall charging while the device still reports
+     * itself as running.
+     */
     chargeCurrentLimitAmps(temperatureC) {
       const span = limits.derateEndC - limits.derateStartC;
-      const derate = clamp((limits.derateEndC - temperatureC) / span, 0, 1);
-      return electrical.maxChargeCurrentAmps * derate;
+      const floor = limits.derateFloorFraction ?? 0;
+      const taper = clamp((limits.derateEndC - temperatureC) / span, 0, 1);
+      return electrical.maxChargeCurrentAmps * (floor + (1 - floor) * taper);
     },
 
     efficiency(watts) {

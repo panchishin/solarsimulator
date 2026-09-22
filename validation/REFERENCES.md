@@ -33,7 +33,6 @@ Test names are in `tests/unit/*.test.js`. `tests/simulation.test.js` belongs to 
 | `nec-ch9-t8` | input, check | conductor cross-sectional areas and diameters for 14 AWG through 4/0 | case `conductor-resistance` |
 | `nec-310-17` | check | free-air ampacity per gauge, 60 C and 75 C columns | case `conductor-ampacity`, `thermal.test.js` |
 | `nec-ch9-t5` | input | THHN/THWN-2 insulation outer diameters and the 90 C rating | not directly compared |
-| `nec-310-16` | input | raceway ampacity per gauge, 75 C column | not directly compared |
 
 `nec-ch9-t8` is both roles at once. The engine takes only the area column; resistance is computed
 from copper's resistivity and temperature coefficient, so the table's own resistance column is an
@@ -54,9 +53,10 @@ its outer surface area. No published figure is compared against it. It is exerci
 the `conductor-ampacity` result depends on the outer diameter, so a wrong diameter would show up
 there.
 
-`nec-310-16` supplies the raceway ampacity column, which the engine carries for reference and
-never uses. The thermal model solves one conductor in still air, which is Table 310.17's geometry,
-not a bundle in a conduit, so there is nothing here to compare the raceway column against.
+The raceway ampacity column of Table 310.16 is deliberately absent. The thermal model solves one
+conductor in still air, which is Table 310.17's geometry, not a bundle in a conduit, so the
+raceway figures could neither be used nor compared against; carrying them only implied a
+capability the engine does not have.
 
 ## Materials and heat transfer
 
@@ -335,8 +335,8 @@ number.
   element-to-sheath contact, and the fuse, breaker, switch and busbar bodies.
 - Fire spread rests on `simulation.fire`. The mass-loss rate and radiative fraction come from
   `sfpe-handbook`, but they are mid-range values for charring polymers rather than measurements of
-  any of the materials in the catalog, and the 0.15 m flame radius and 900 C flame temperature are
-  estimates. No case compares a spread rate or a flame temperature against anything.
+  any of the materials in the catalog, and the 0.15 m flame radius is an estimate. No case
+  compares a spread rate against anything.
 - Both PV bypass diodes use an `estimate:` junction characteristic, and the diode ideality factor
   is an estimate inside the range `villalva-2009` recommends.
 - The BMS `protectionResponseSeconds` is an estimate, and the 5 C charge-reconnect threshold is
@@ -354,8 +354,9 @@ actually used it. All six are fixed in `catalog/catalog.v3.json`; they are recor
 the same mistakes are easy to make again.
 
 1. `nec-310-16` was declared and cited by nothing: the raceway ampacity entries carried
-   `ampacitySource: ref:nec-310-17`, the free-air table. The ampacity provenance is now split into
-   `ampacityFreeAirSource` and `ampacityRacewaySource`, one per column.
+   `ampacitySource: ref:nec-310-17`, the free-air table. Splitting the provenance per column
+   exposed the deeper problem, which was that the engine read no raceway figure at all. The
+   column and the reference are both gone; `ampacityFreeAirSource` remains.
 2. The `crc-handbook` note claimed tungsten, which `crc-tungsten` supplies instead. A filament
    needs resistivity over a 2500 K range, not one value at room temperature.
 3. The `matweb-materials` title listed 6061 aluminium and borosilicate glass, neither of which is

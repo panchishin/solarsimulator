@@ -291,10 +291,14 @@ catalog input. Nothing is fitted to a simulation result.
 
 ```
 I_ph(G, T) = G/G_stc · (I_sc + α_Isc (T − 25))
-I_0(T)     = I_0,stc · (T_K/298.15)³ · exp(q E_g/(n k) (1/298.15 − 1/T_K))
+I_0(T)     = I_ph(T) / (exp(V_oc(T)/a(T)) − 1)
+V_oc(T)    = V_oc,stc · (1 + β_Voc (T − 25))
 ```
 
-`E_g = 1.121 eV` for silicon (`ref:desoto-2006`).
+`I_0` is anchored to the datasheet open-circuit voltage at the cell temperature rather than
+advanced by the band-gap form of `ref:desoto-2006`. Both are the same equation rearranged, but
+the anchored one reproduces the module's published `V_oc` temperature coefficient exactly, and
+that coefficient is a datasheet number where the band gap would be a literature constant.
 
 Cell temperature, Faiman module-temperature model (`ref:faiman-2008`, coefficients per
 `ref:koehl-2011`):
@@ -374,7 +378,8 @@ either side propagate to the other.
 Stages: `bulk` (current limit `I_max`), `absorb` (regulate `V_out` to `absorbVoltage` until
 current falls below `tailCurrentFraction` or `absorbHoldSeconds` elapses), `float` (regulate to
 `floatVoltage`). Input over-voltage above `maxInputVoltage` disconnects; heatsink temperature
-above the derate threshold scales `I_max` linearly to zero at shutdown. Which loop is binding is
+above `derateStartC` tapers `I_max` towards `derateFloorFraction` of its rating at `derateEndC`,
+by the same law and for the same reason as the inverter (§7). Which loop is binding is
 reported rather than assumed, and the tracker perturbs only while the maximum-power loop binds:
 hill-climbing against a controller that is voltage-limited measures the pack, not the array.
 
@@ -455,8 +460,20 @@ under a millisecond, and the load dies with it.
   the inverter delivers anything: 3 m of 14 AWG plus a pack's internal resistance is 48 mΩ, and
   a source behind 48 mΩ at 13.3 V can deliver at most `V²/4R` = 914 W into anything at all,
   which is below what a 1,500 W load asks for. There is no operating point at any bus voltage.
-- Heatsink temperature above `derateStartC` scales `P_rated` linearly to zero at `derateEndC`;
-  above `shutdownC` the inverter turns off. At 60 °C the 1,000 W unit is a 500 W inverter.
+- Heatsink temperature above `derateStartC` tapers `P_rated` linearly towards
+  `derateFloorFraction` of nameplate at `derateEndC`; above `shutdownC` the inverter turns off.
+
+  ```
+  P_rated(T) = P_nameplate · (f + (1 − f) · clamp((derateEndC − T)/(derateEndC − derateStartC), 0, 1))
+  ```
+
+  The floor is load-bearing, not cosmetic. Derating sheds load to protect the output stage, and
+  hardware holds a reduced output up to the temperature it shuts down at. Every derating part in
+  this catalog sets `shutdownC` above `derateEndC`, so a taper reaching zero leaves a band where
+  the rating is zero while the device is still switching. Any output is then an infinite multiple
+  of rating, the inverse-time overload accumulator saturates in one step, and the overload trip
+  fires before the thermal shutdown it is meant to lose to. `shutdownC` becomes unreachable and a
+  genuine overheat is reported as an overload.
 - Reverse DC polarity puts the H-bridge body diodes across the input: a diode branch conducting
   for `V_dc < 0` with the catalog's series resistance, solved for its own current so that its
   dissipation is the branch's and not the internal node's (which KCL forces to zero). The energy

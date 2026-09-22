@@ -50,11 +50,21 @@ export function createInverterDevice({ base, catalog }) {
     },
     mode: "on",
 
-    /** Continuous rating after thermal derate, W. */
+    /**
+     * Continuous rating after thermal derate, W.
+     *
+     * The taper stops at `derateFloorFraction` rather than reaching zero. Derating sheds load to
+     * protect the output stage, and hardware holds a reduced output right up to the temperature it
+     * shuts down at. A rating of zero below `shutdownC` makes any output an infinite multiple of
+     * rating, so the inverse-time overload accumulator saturates instantly and trips the inverter
+     * before the thermal shutdown can: the over-temperature path becomes unreachable and a genuine
+     * overheat is reported as an overload.
+     */
     ratedOutputWatts(temperatureC) {
       const span = limits.derateEndC - limits.derateStartC;
-      const factor = clamp((limits.derateEndC - temperatureC) / span, 0, 1);
-      return electrical.continuousOutputWatts * factor;
+      const floor = limits.derateFloorFraction ?? 0;
+      const taper = clamp((limits.derateEndC - temperatureC) / span, 0, 1);
+      return electrical.continuousOutputWatts * (floor + (1 - floor) * taper);
     },
 
     efficiency(convertedWatts, temperatureC) {

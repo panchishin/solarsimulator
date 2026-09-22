@@ -188,15 +188,17 @@ test("an overload trips on the datasheet curve, then hiccups against its own loc
 });
 
 test("a heatsink above the derate threshold makes a legal load an overload", () => {
-  // Same inverter, same load, 60 C ambient. The rating falls linearly from derateStartC to zero
-  // at derateEndC, so 1,000 W of hardware is a 500 W inverter here.
+  // Same inverter, same load, 60 C ambient. The rating tapers linearly from derateStartC towards
+  // derateFloorFraction of nameplate at derateEndC, so this 1,000 W unit is well under half an
+  // inverter here.
   const hot = bench({ acLoad: "load-fridge-400w", packs: 2, ambientC: 60 });
   hot.stepFixed(0.5);
   const derated = hot.measure("inv");
   const span = definition.limits.derateEndC - definition.limits.derateStartC;
+  const floor = definition.limits.derateFloorFraction;
+  const taper = Math.max(0, Math.min(1, (definition.limits.derateEndC - derated.temperatureC) / span));
   const expected =
-    definition.electrical.continuousOutputWatts *
-    Math.max(0, Math.min(1, (definition.limits.derateEndC - derated.temperatureC) / span));
+    definition.electrical.continuousOutputWatts * (floor + (1 - floor) * taper);
 
   console.log(
     `heatsink ${derated.temperatureC.toFixed(1)} C: rating ${derated.ratedOutputWatts.toFixed(0)} W ` +
@@ -207,6 +209,25 @@ test("a heatsink above the derate threshold makes a legal load an overload", () 
     derated.ratedOutputWatts < definition.electrical.continuousOutputWatts,
     "a hot inverter should not carry its full rating"
   );
+});
+
+test("the derate floor keeps the thermal shutdown reachable", () => {
+  // The defect this floor fixes: with the taper reaching zero, rating hit 0 W at derateEndC, which
+  // is below shutdownC on every derating part in the catalog. Any output was then an infinite
+  // multiple of rating, so the inverse-time overload trip always fired first and shutdownC was
+  // dead code. The floor is what makes an over-temperature report as one.
+  for (const [id, entry] of catalog.components) {
+    const limits = entry.model.limits ?? {};
+    if (limits.derateStartC === undefined) continue;
+    assert.ok(
+      limits.derateFloorFraction > 0,
+      `${id} derates without a floor, so its rating reaches zero below shutdownC`
+    );
+    assert.ok(
+      limits.shutdownC > limits.derateEndC,
+      `${id} shuts down at or below the end of its derate band`
+    );
+  }
 });
 
 test("an undersized DC cable trips the inverter on under-voltage before it delivers anything", () => {

@@ -5,11 +5,7 @@
     "title": "SFPE Handbook of Fire Protection Engineering, 5th ed. — mass-loss rates and radiative fractions of burning polymers",
     "note": "Free-burning mass-loss rate near 0.02 kg/m2s and a radiative fraction near 0.3 for charring polymers. Mid-range values: a real fire depends on ventilation, orientation and sample thickness, none of which the engine models."
   },
-  "nec-310-16": {
-      "title": "NFPA 70 National Electrical Code, Table 310.16 — allowable ampacities of insulated conductors in raceway, cable or earth, 30 °C ambient",
-      "note": "Source of the raceway ampacity column, which the engine carries for reference only: the thermal model solves one conductor in still air, which is Table 310.17's geometry."
-    },
-    "nec-310-17": {
+  "nec-310-17": {
       "title": "NFPA 70 National Electrical Code, Table 310.17 — allowable ampacities of single insulated conductors in free air, 30 °C ambient",
       "note": "This is the geometry the engine models: one conductor, still air. Validation compares the solved conductor temperature against the insulation rating at this current."
     },
@@ -91,7 +87,7 @@
     },
     "desoto-2006": {
       "title": "De Soto, Klein & Beckman, 'Improvement and validation of a model for photovoltaic array performance', Solar Energy 80 (2006)",
-      "note": "Five-parameter single-diode model and the temperature dependence of I0 and Iph. Silicon band gap 1.121 eV."
+      "note": "Five-parameter single-diode model and the temperature dependence of I0 and Iph. The engine anchors I0 to the datasheet Voc coefficient instead of to the band gap, so only the model form is taken from here."
     },
     "villalva-2009": {
       "title": "Villalva, Gazoli & Ruppert, 'Comprehensive approach to modeling and simulation of photovoltaic arrays', IEEE Trans. Power Electronics 24 (2009)",
@@ -271,11 +267,10 @@
       "aerosolAbsorptionFactor": 0.1
     },
     "fire": {
-      "source": "ref:sfpe-handbook for the free-burning mass-loss rate and the radiative fraction; estimate:the flame radius and flame temperature are the geometric reach and gas temperature used for spread between adjacent devices",
+      "source": "ref:sfpe-handbook for the free-burning mass-loss rate and the radiative fraction; estimate:the flame radius is the geometric reach used for spread between adjacent devices",
       "massLossRateKgPerM2S": 0.02,
       "radiativeFraction": 0.3,
-      "flameRadiusM": 0.15,
-      "flameTemperatureC": 900
+      "flameRadiusM": 0.15
     },
     "weather": {
       "source": "assumption:synthetic but deterministic cloud series; shape follows ref:pvwatts-v5",
@@ -348,9 +343,7 @@
       "specificHeatJPerKgC": 840,
       "thermalConductivityWPerMK": 1.0,
       "emissivity": 0.9,
-      "softeningTemperatureC": 700,
-      "infraredAbsorptance": 0.15,
-      "infraredAbsorptanceSource": "ref:ge-lamp-handbook fraction of filament radiation absorbed by the envelope; the visible and near-infrared balance is transmitted"
+      "softeningTemperatureC": 700
     },
     "abs-plastic": {
       "source": "ref:matweb-materials",
@@ -370,7 +363,6 @@
       "thermalConductivityWPerMK": 0.17,
       "emissivity": 0.92,
       "softeningTemperatureC": 105,
-      "charTemperatureC": 250,
       "ignitionTemperatureC": 450,
       "heatOfCombustionJPerKg": 2.0e7,
       "ignitionSource": "ref:pvc-ignition"
@@ -400,8 +392,7 @@
       "runawayOnsetTemperatureC": 200,
       "runawayActivationEnergyJPerMol": 1.2e5,
       "runawayPreExponentialPerS": 7.1e7,
-      "runawayHeatJPerKg": 5.0e5,
-      "ventTemperatureC": 250
+      "runawayHeatJPerKg": 5.0e5
     },
     "air": {
       "source": "ref:incropera",
@@ -424,9 +415,7 @@
         "conductorDiameterMm": 1.63,
         "ampacityFreeAir60CAmps": 25,
         "ampacityFreeAir75CAmps": 30,
-        "ampacityRaceway75CAmps": 20,
-        "ampacityFreeAirSource": "ref:nec-310-17",
-        "ampacityRacewaySource": "ref:nec-310-16"
+        "ampacityFreeAirSource": "ref:nec-310-17"
       },
       "12": {
         "source": "ref:nec-ch9-t8",
@@ -434,9 +423,7 @@
         "conductorDiameterMm": 2.05,
         "ampacityFreeAir60CAmps": 30,
         "ampacityFreeAir75CAmps": 35,
-        "ampacityRaceway75CAmps": 25,
-        "ampacityFreeAirSource": "ref:nec-310-17",
-        "ampacityRacewaySource": "ref:nec-310-16"
+        "ampacityFreeAirSource": "ref:nec-310-17"
       },
       "10": {
         "source": "ref:nec-ch9-t8",
@@ -444,9 +431,7 @@
         "conductorDiameterMm": 2.59,
         "ampacityFreeAir60CAmps": 40,
         "ampacityFreeAir75CAmps": 50,
-        "ampacityRaceway75CAmps": 35,
-        "ampacityFreeAirSource": "ref:nec-310-17",
-        "ampacityRacewaySource": "ref:nec-310-16"
+        "ampacityFreeAirSource": "ref:nec-310-17"
       },
       "8": {
         "source": "ref:nec-ch9-t8",
@@ -454,9 +439,7 @@
         "conductorDiameterMm": 3.26,
         "ampacityFreeAir60CAmps": 60,
         "ampacityFreeAir75CAmps": 70,
-        "ampacityRaceway75CAmps": 50,
-        "ampacityFreeAirSource": "ref:nec-310-17",
-        "ampacityRacewaySource": "ref:nec-310-16"
+        "ampacityFreeAirSource": "ref:nec-310-17"
       },
       "6": {
         "source": "ref:nec-ch9-t8",
@@ -464,9 +447,7 @@
         "conductorDiameterMm": 4.12,
         "ampacityFreeAir60CAmps": 80,
         "ampacityFreeAir75CAmps": 95,
-        "ampacityRaceway75CAmps": 65,
-        "ampacityFreeAirSource": "ref:nec-310-17",
-        "ampacityRacewaySource": "ref:nec-310-16"
+        "ampacityFreeAirSource": "ref:nec-310-17"
       },
       "4": {
         "source": "ref:nec-ch9-t8",
@@ -474,9 +455,7 @@
         "conductorDiameterMm": 5.19,
         "ampacityFreeAir60CAmps": 105,
         "ampacityFreeAir75CAmps": 125,
-        "ampacityRaceway75CAmps": 85,
-        "ampacityFreeAirSource": "ref:nec-310-17",
-        "ampacityRacewaySource": "ref:nec-310-16"
+        "ampacityFreeAirSource": "ref:nec-310-17"
       },
       "2": {
         "source": "ref:nec-ch9-t8",
@@ -484,9 +463,7 @@
         "conductorDiameterMm": 6.54,
         "ampacityFreeAir60CAmps": 140,
         "ampacityFreeAir75CAmps": 170,
-        "ampacityRaceway75CAmps": 115,
-        "ampacityFreeAirSource": "ref:nec-310-17",
-        "ampacityRacewaySource": "ref:nec-310-16"
+        "ampacityFreeAirSource": "ref:nec-310-17"
       },
       "1": {
         "source": "ref:nec-ch9-t8",
@@ -494,9 +471,7 @@
         "conductorDiameterMm": 7.35,
         "ampacityFreeAir60CAmps": 165,
         "ampacityFreeAir75CAmps": 195,
-        "ampacityRaceway75CAmps": 130,
-        "ampacityFreeAirSource": "ref:nec-310-17",
-        "ampacityRacewaySource": "ref:nec-310-16"
+        "ampacityFreeAirSource": "ref:nec-310-17"
       },
       "1/0": {
         "source": "ref:nec-ch9-t8",
@@ -504,9 +479,7 @@
         "conductorDiameterMm": 8.25,
         "ampacityFreeAir60CAmps": 195,
         "ampacityFreeAir75CAmps": 230,
-        "ampacityRaceway75CAmps": 150,
-        "ampacityFreeAirSource": "ref:nec-310-17",
-        "ampacityRacewaySource": "ref:nec-310-16"
+        "ampacityFreeAirSource": "ref:nec-310-17"
       },
       "2/0": {
         "source": "ref:nec-ch9-t8",
@@ -514,9 +487,7 @@
         "conductorDiameterMm": 9.27,
         "ampacityFreeAir60CAmps": 225,
         "ampacityFreeAir75CAmps": 265,
-        "ampacityRaceway75CAmps": 175,
-        "ampacityFreeAirSource": "ref:nec-310-17",
-        "ampacityRacewaySource": "ref:nec-310-16"
+        "ampacityFreeAirSource": "ref:nec-310-17"
       },
       "4/0": {
         "source": "ref:nec-ch9-t8",
@@ -524,9 +495,7 @@
         "conductorDiameterMm": 11.68,
         "ampacityFreeAir60CAmps": 315,
         "ampacityFreeAir75CAmps": 360,
-        "ampacityRaceway75CAmps": 230,
-        "ampacityFreeAirSource": "ref:nec-310-17",
-        "ampacityRacewaySource": "ref:nec-310-16"
+        "ampacityFreeAirSource": "ref:nec-310-17"
       }
     }
   },
@@ -905,8 +874,6 @@
           "pmpTempCoefficientPercentPerC": -0.39,
           "diodeIdeality": 1.1,
           "diodeIdealitySource": "estimate:typical value for monocrystalline silicon, ref:villalva-2009 recommends 1.0-1.5",
-          "bandGapEv": 1.121,
-          "bandGapSource": "ref:desoto-2006",
           "bypassDiode": {
             "saturationCurrentAmps": 1e-8,
             "idealityFactor": 1.5,
@@ -916,7 +883,6 @@
         },
         "limits": {
           "source": "ref:canadian-solar-cs6k-300ms",
-          "maxSystemVoltage": 1000,
           "damageTemperatureC": 150,
           "damageTemperatureSource": "estimate:EVA encapsulant and backsheet degradation threshold"
         },
@@ -977,8 +943,6 @@
           "pmpTempCoefficientPercentPerC": -0.40,
           "diodeIdeality": 1.1,
           "diodeIdealitySource": "estimate:typical value for monocrystalline silicon, ref:villalva-2009",
-          "bandGapEv": 1.121,
-          "bandGapSource": "ref:desoto-2006",
           "bypassDiode": {
             "saturationCurrentAmps": 1e-8,
             "idealityFactor": 1.5,
@@ -988,7 +952,6 @@
         },
         "limits": {
           "source": "ref:renogy-100d",
-          "maxSystemVoltage": 600,
           "damageTemperatureC": 150,
           "damageTemperatureSource": "estimate:EVA encapsulant and backsheet degradation threshold"
         },
@@ -1089,6 +1052,8 @@
           "derateStartC": 40,
           "derateEndC": 80,
           "shutdownC": 90,
+          "derateFloorFraction": 0.35,
+          "derateFloorSource": "estimate:derating protects the output stage by shedding load, and hardware holds a reduced output up to its shutdown temperature rather than falling to zero. A third of rating is the floor this class holds; without it the rating reaches zero below shutdownC, every output becomes an infinite multiple of rating, and the inverse-time overload trip always fires before the thermal shutdown it is supposed to lose to",
           "damageTemperatureC": 120,
           "damageTemperatureSource": "estimate:printed-circuit assembly solder and capacitor limit",
           "overVoltageDamageMultiple": 1.15,
@@ -1166,6 +1131,8 @@
           "derateStartC": 45,
           "derateEndC": 75,
           "shutdownC": 85,
+          "derateFloorFraction": 0.35,
+          "derateFloorSource": "estimate:derating protects the output stage by shedding load, and hardware holds a reduced output up to its shutdown temperature rather than falling to zero. A third of rating is the floor this class holds; without it the rating reaches zero below shutdownC, every output becomes an infinite multiple of rating, and the inverse-time overload trip always fires before the thermal shutdown it is supposed to lose to",
           "damageTemperatureC": 110,
           "overVoltageDamageMultiple": 1.15
         },
@@ -1211,7 +1178,6 @@
         "electrical": {
           "nominalInputVoltage": 12,
           "outputVoltage": 120,
-          "outputFrequencyHz": 60,
           "continuousOutputWatts": 1000,
           "peakOutputWatts": 2400,
           "idleDrawWatts": 8,
@@ -1260,6 +1226,8 @@
           "derateStartC": 40,
           "derateEndC": 80,
           "shutdownC": 90,
+          "derateFloorFraction": 0.35,
+          "derateFloorSource": "estimate:derating protects the output stage by shedding load, and hardware holds a reduced output up to its shutdown temperature rather than falling to zero. A third of rating is the floor this class holds; without it the rating reaches zero below shutdownC, every output becomes an infinite multiple of rating, and the inverse-time overload trip always fires before the thermal shutdown it is supposed to lose to",
           "damageTemperatureC": 130,
           "damageTemperatureSource": "estimate:electrolytic capacitor and solder limit",
           "reversePolarityDamageJoules": 400,
@@ -1313,7 +1281,6 @@
         "electrical": {
           "nominalInputVoltage": 48,
           "outputVoltage": 120,
-          "outputFrequencyHz": 60,
           "continuousOutputWatts": 2400,
           "peakOutputWatts": 6000,
           "idleDrawWatts": 20,
@@ -1362,6 +1329,8 @@
           "derateStartC": 40,
           "derateEndC": 80,
           "shutdownC": 90,
+          "derateFloorFraction": 0.35,
+          "derateFloorSource": "estimate:derating protects the output stage by shedding load, and hardware holds a reduced output up to its shutdown temperature rather than falling to zero. A third of rating is the floor this class holds; without it the rating reaches zero below shutdownC, every output becomes an infinite multiple of rating, and the inverse-time overload trip always fires before the thermal shutdown it is supposed to lose to",
           "damageTemperatureC": 130,
           "damageTemperatureSource": "estimate:electrolytic capacitor and solder limit",
           "reversePolarityDamageJoules": 1500,
@@ -1590,8 +1559,6 @@
           "source": "estimate:motor winding insulation class and stall protection",
           "damageTemperatureC": 130,
           "damageMode": "open",
-          "stallVoltageFraction": 0.8,
-          "stallVoltageSource": "estimate:a single-phase compressor cannot start below about 80 % of nameplate voltage",
           "overVoltageDamage": 132.0,
           "overVoltageSource": "estimate:110 % of nameplate, the upper utilisation limit an appliance is built to tolerate; beyond it the motor run capacitor and starting electronics are out of spec"
         },
@@ -2300,8 +2267,6 @@
           "tempCoefficientSource": "estimate:typical N-type TOPCon coefficients, which are milder than the P-type ones of ref:canadian-solar-cs6k-300ms because the cell's open-circuit voltage starts higher",
           "diodeIdeality": 1.1,
           "diodeIdealitySource": "estimate:typical value for monocrystalline silicon, ref:villalva-2009 recommends 1.0-1.5",
-          "bandGapEv": 1.121,
-          "bandGapSource": "ref:desoto-2006",
           "bypassDiode": {
             "saturationCurrentAmps": 1e-8,
             "idealityFactor": 1.5,
@@ -2310,9 +2275,7 @@
           }
         },
         "limits": {
-          "source": "estimate:the listing states no system voltage or temperature limits",
-          "maxSystemVoltage": 600,
-          "maxSystemVoltageSource": "estimate:small modules wired for 12 V systems carry the 600 V class rating rather than the 1000 V of utility modules",
+          "source": "estimate:the listing states no temperature limits",
           "damageTemperatureC": 150,
           "damageTemperatureSource": "estimate:EVA encapsulant and backsheet degradation threshold"
         },
@@ -2416,6 +2379,8 @@
           "derateStartC": 40,
           "derateEndC": 80,
           "shutdownC": 90,
+          "derateFloorFraction": 0.35,
+          "derateFloorSource": "estimate:derating protects the output stage by shedding load, and hardware holds a reduced output up to its shutdown temperature rather than falling to zero. A third of rating is the floor this class holds; without it the rating reaches zero below shutdownC, every output becomes an infinite multiple of rating, and the inverse-time overload trip always fires before the thermal shutdown it is supposed to lose to",
           "derateSource": "estimate:the same derating band as ref:victron-mppt-100-50, set by the same silicon and capacitor temperatures",
           "damageTemperatureC": 120,
           "damageTemperatureSource": "estimate:printed-circuit assembly solder and capacitor limit",
@@ -2587,7 +2552,6 @@
         "electrical": {
           "nominalInputVoltage": 48,
           "outputVoltage": 110,
-          "outputFrequencyHz": 60,
           "continuousOutputWatts": 2500,
           "peakOutputWatts": 5000,
           "idleDrawWatts": 25,
@@ -2639,6 +2603,8 @@
           "derateStartC": 40,
           "derateEndC": 75,
           "shutdownC": 85,
+          "derateFloorFraction": 0.35,
+          "derateFloorSource": "estimate:derating protects the output stage by shedding load, and hardware holds a reduced output up to its shutdown temperature rather than falling to zero. A third of rating is the floor this class holds; without it the rating reaches zero below shutdownC, every output becomes an infinite multiple of rating, and the inverse-time overload trip always fires before the thermal shutdown it is supposed to lose to",
           "derateSource": "estimate:a fan-cooled aluminium case with no published derating curve; the band is narrower than ref:victron-multiplus because the heatsink is smaller",
           "damageTemperatureC": 125,
           "damageTemperatureSource": "estimate:electrolytic capacitor and solder limit",
@@ -2650,12 +2616,12 @@
             "heatsink": {
               "material": "aluminium",
               "massKg": 7,
-              "surface": { "geometry": "verticalPlate", "areaM2": 0.24, "characteristicLengthM": 0.33, "forcedAirVelocityMPerS": 3.0, "fanOnTemperatureC": 40 }
+              "surface": { "geometry": "verticalPlate", "areaM2": 0.5, "characteristicLengthM": 0.33, "forcedAirVelocityMPerS": 3.0, "fanOnTemperatureC": 40 }
             }
           },
           "links": [],
           "heatNode": "heatsink",
-          "source": "estimate:330 x 250 x 130 mm case, exposed area excludes the mounting face, with two thermostatically switched fans"
+          "source": "estimate:330 x 250 x 130 mm case with two thermostatically switched fans. The bare envelope less the mounting face is 0.273 m2 and the fins roughly double it, the same basis as ref:victron-mppt-100-50's finned case. Counting only the bare box put 185 W through 0.24 m2, a flux no fan-cooled aluminium enclosure sheds below its own derating band"
         }
       }
     }
