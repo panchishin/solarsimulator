@@ -5,6 +5,7 @@
 import { CircuitEditor } from "./circuit.js";
 import {
   createSession,
+  defaultCircuit,
   fetchCatalog,
   groupLabel,
   paletteGroups,
@@ -428,6 +429,12 @@ function bindControls() {
   byId("delete-button").addEventListener("click", () => editor.deleteSelection());
   byId("clear-button").addEventListener("click", () => {
     if (currentLayout().circuit.components.length) editor.clear();
+  });
+  byId("default-button").addEventListener("click", () => {
+    // A starter system replaces the board rather than adding to it, and starts its own day: there
+    // is no state worth carrying from the layout it just displaced.
+    editor.replaceCircuit(defaultCircuit(catalog), true);
+    resetSimulation();
   });
   document.addEventListener("keydown", (event) => {
     if (event.target.matches("input, select, textarea")) return;

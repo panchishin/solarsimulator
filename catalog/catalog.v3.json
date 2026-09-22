@@ -192,6 +192,22 @@
     "dc-led-strip": {
       "title": "12 V DC LED tape lighting circuit, generic",
       "note": "A 12 V LED tape runs its diodes in strings of three behind a series resistor, so over its operating range the current follows the resistor rather than the diodes and the circuit measures as a resistance. Used as the small resistive DC load: cabin lighting is what an off-grid pack runs overnight."
+    },
+    "aeternasol-200w-bifacial": {
+      "title": "AeternaSol 200 W bifacial N-type monocrystalline 12 V module - retail product listing",
+      "note": "A marketplace listing, not a datasheet. It states 200 W, bifacial N-type cells with 18 busbars, 12 V nominal system voltage, an IP68 junction box, and 25 % efficiency. It publishes no Vmp, Imp, Voc, Isc, temperature coefficients, dimensions or mass, so the current-voltage curve here is a 36-cell N-type module scaled to the 200 W rating. The 25 % is a cell figure, not a module one: 200 W at 25 % module efficiency would be a 0.80 m2 module, which no commercial module reaches, while production N-type TOPCon cells do reach 25 %. Area is taken from the 1480 x 690 mm outline standard for a 200 W 12 V panel, which makes this module 19.6 % efficient. The engine has no rear-side irradiance term, so the bifacial gain the panel is sold for is not modelled and it runs as a monofacial 200 W module."
+    },
+    "generic-48v-2500w-inverter": {
+      "title": "48 V 2,500 W pure sine wave inverter with 110 V AC output - retail product listing",
+      "note": "A marketplace listing: 2,500 W continuous, 5,000 W peak, 48 V DC input, 110 V 60 Hz pure sine output, four AC outlets, USB and Type-C ports, and an adjustable low-voltage cutoff for lithium packs. No efficiency curve, no-load draw, trip threshold, time at peak power, mass or case size is published. Those follow the low-cost high-frequency class, which sits several efficiency points below a transformer-isolated unit such as ref:victron-multiplus and holds an overload for seconds rather than minutes."
+    },
+    "temgo-48v-100ah": {
+      "title": "TEMGO 48 V 100 Ah LiFePO4 golf cart battery - retail product listing",
+      "note": "A marketplace listing: 51.2 V 100 Ah (16 cells in series, 5.12 kWh), a BMS rated 200 A continuous with a 600 A peak, low-temperature charge protection, an IP65 enclosure, LCD and Bluetooth monitoring, and a supplied 56.8 V 18 A charger, which is 3.55 V per cell at full charge. Cell-level curves, internal resistance, the charge current limit and the duration of the 600 A peak are not published; they come from the LiFePO4 references, which is defensible because this is the same chemistry in the same series count as the rack pack."
+    },
+    "generic-100a-mppt": {
+      "title": "100 A MPPT solar charge controller, 12/24/36/48 V - retail product listing",
+      "note": "A marketplace listing: 100 A charge current, automatic 12/24/36/48 V battery detection, an LCD, dual USB outlets, seven battery-type modes, and maximum power point tracking claimed. It states no PV input voltage ceiling, no efficiency, no self-consumption and no charge set points. Tracking behaviour and the charge profile follow ref:esram-chapman and ref:victron-mppt-100-50; efficiency and self-consumption are estimated for the class."
     }
   },
   "simulation": {
@@ -2239,6 +2255,407 @@
           "links": [],
           "heatNode": "bar",
           "source": "estimate:6 x 20 x 160 mm copper bar on an insulating base"
+        }
+      }
+    },
+    {
+      "id": "pv-bifacial-200w",
+      "group": "pv",
+      "name": "200 W bifacial N-type PV module",
+      "shortName": "200 W panel",
+      "description": "Thirty-six N-type cells in series with two bypass diodes. Sold as bifacial; the engine has no rear-side irradiance term, so it runs as a monofacial module.",
+      "gridSize": { "width": 5, "height": 4 },
+      "specifications": {
+        "Rated power": "200 W at STC",
+        "Vmp / Imp": "20.4 V / 9.8 A",
+        "Voc / Isc": "24.5 V / 10.45 A",
+        "Cells": "36 N-type in series, 2 substrings",
+        "Area": "1.02 m² (19.6 % module efficiency)",
+        "Enclosure": "IP68 junction box",
+        "Mass": "12.7 kg"
+      },
+      "terminals": [
+        { "id": "positive", "label": "+", "role": "dc-positive", "domain": "dc", "edge": "right", "offset": 0.3 },
+        { "id": "negative", "label": "−", "role": "dc-negative", "domain": "dc", "edge": "right", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "pv",
+        "source": "ref:aeternasol-200w-bifacial",
+        "electrical": {
+          "cellsInSeries": 36,
+          "cellsInSeriesSource": "derived:a 12 V nominal module is a 36-cell series string, and at 0.68 V open circuit per cell that is where an N-type cell sits",
+          "substrings": 2,
+          "substringsSource": "estimate:two bypass diodes across eighteen cells each, the standard junction-box arrangement for a 36-cell module",
+          "shortCircuitCurrentAmps": 10.45,
+          "shortCircuitCurrentSource": "derived:the listing publishes only the 200 W rating, so the current follows from it at a 0.78 fill factor with the open-circuit voltage below",
+          "openCircuitVoltage": 24.5,
+          "openCircuitVoltageSource": "derived:36 N-type cells at 0.68 V open circuit each",
+          "maxPowerVoltage": 20.4,
+          "maxPowerVoltageSource": "derived:0.83 of open circuit, the ratio a silicon module holds at STC",
+          "maxPowerCurrentAmps": 9.8,
+          "maxPowerCurrentSource": "derived:the 200 W rating of ref:aeternasol-200w-bifacial divided by the 20.4 V maximum-power voltage",
+          "iscTempCoefficientPercentPerC": 0.04,
+          "vocTempCoefficientPercentPerC": -0.25,
+          "pmpTempCoefficientPercentPerC": -0.3,
+          "tempCoefficientSource": "estimate:typical N-type TOPCon coefficients, which are milder than the P-type ones of ref:canadian-solar-cs6k-300ms because the cell's open-circuit voltage starts higher",
+          "diodeIdeality": 1.1,
+          "diodeIdealitySource": "estimate:typical value for monocrystalline silicon, ref:villalva-2009 recommends 1.0-1.5",
+          "bandGapEv": 1.121,
+          "bandGapSource": "ref:desoto-2006",
+          "bypassDiode": {
+            "saturationCurrentAmps": 1e-8,
+            "idealityFactor": 1.5,
+            "seriesResistanceOhms": 0.01,
+            "source": "estimate:junction-box bypass diode, typical PN characteristic"
+          }
+        },
+        "limits": {
+          "source": "estimate:the listing states no system voltage or temperature limits",
+          "maxSystemVoltage": 600,
+          "maxSystemVoltageSource": "estimate:small modules wired for 12 V systems carry the 600 V class rating rather than the 1000 V of utility modules",
+          "damageTemperatureC": 150,
+          "damageTemperatureSource": "estimate:EVA encapsulant and backsheet degradation threshold"
+        },
+        "optical": {
+          "source": "ref:aeternasol-200w-bifacial",
+          "areaM2": 1.0212,
+          "areaSource": "estimate:1480 x 690 mm, the standard outline of a 200 W 12 V module. The listing's 25 % efficiency is a cell figure: taken as a module figure it would need 0.80 m2, which no commercial module reaches",
+          "absorptance": 0.9,
+          "absorptanceSource": "estimate:glass and cell absorptance for an anti-reflective coated module",
+          "faimanU0": 25,
+          "faimanU1": 6.84,
+          "faimanSource": "ref:koehl-2011"
+        },
+        "thermal": {
+          "nodes": {
+            "cell": {
+              "material": "silicon-module",
+              "massKg": 12.7,
+              "surface": { "geometry": "faiman", "areaM2": 1.0212 }
+            }
+          },
+          "links": [],
+          "heatNode": "cell",
+          "source": "ref:faiman-2008 for the heat-transfer form; estimate:12.7 kg is a 1.02 m2 bifacial laminate, two 2 mm glass sheets at 10.2 kg plus frame, cells and junction box"
+        }
+      }
+    },
+    {
+      "id": "controller-mppt-100a",
+      "group": "controller",
+      "name": "MPPT 100 A charge controller",
+      "shortName": "MPPT 100 A",
+      "description": "Auto-voltage MPPT controller, 100 A charge, seven battery-type modes.",
+      "gridSize": { "width": 5, "height": 3 },
+      "specifications": {
+        "PV input": "150 V maximum open circuit",
+        "Charge current": "100 A maximum",
+        "Battery voltage": "12 / 24 / 36 / 48 V automatic",
+        "Peak efficiency": "96 %",
+        "Self consumption": "1.5 W",
+        "Charge stages": "bulk, absorption, float",
+        "Mass": "4.5 kg"
+      },
+      "terminals": [
+        { "id": "pv-positive", "label": "PV +", "role": "pv-positive", "domain": "dc", "edge": "left", "offset": 0.3 },
+        { "id": "pv-negative", "label": "PV −", "role": "pv-negative", "domain": "dc", "edge": "left", "offset": 0.7 },
+        { "id": "battery-positive", "label": "B +", "role": "battery-positive", "domain": "dc", "edge": "right", "offset": 0.3 },
+        { "id": "battery-negative", "label": "B −", "role": "battery-negative", "domain": "dc", "edge": "right", "offset": 0.7 }
+      ],
+      "model": {
+        "type": "chargeController",
+        "source": "ref:generic-100a-mppt",
+        "topology": "mppt",
+        "electrical": {
+          "maxInputVoltage": 150,
+          "maxInputVoltageSource": "estimate:the listing states no PV ceiling. 150 V is the rating of 100 A units of this class, and it has to be: the four series modules this controller is sized for reach 98 V at STC and about 108 V on a -15 C morning, which a 100 V input could not accept",
+          "maxChargeCurrentAmps": 100,
+          "idleDrawWatts": 1.5,
+          "idleDrawSource": "estimate:LCD backlight and dual USB standby, five times the 0.3 W of ref:victron-mppt-100-50, which has neither",
+          "inputBleedResistanceOhms": 100000,
+          "inputBleedSource": "estimate:array-voltage sense divider across the PV input, which also bleeds the input capacitor",
+          "outputBleedResistanceOhms": 100000,
+          "outputBleedSource": "estimate:pack-voltage sense divider, the same order as the array one",
+          "efficiencyCurve": [
+            { "loadFraction": 0.1, "efficiency": 0.92 },
+            { "loadFraction": 0.2, "efficiency": 0.94 },
+            { "loadFraction": 0.5, "efficiency": 0.96 },
+            { "loadFraction": 0.75, "efficiency": 0.955 },
+            { "loadFraction": 1.0, "efficiency": 0.945 }
+          ],
+          "efficiencyCurveSource": "estimate:the listing publishes no efficiency. A low-cost synchronous buck stage peaks near 96 %, two points below ref:victron-mppt-100-50, and falls off at low current where its fixed losses dominate",
+          "controlResistanceOhms": 0.05,
+          "controlResistanceSource": "estimate:small-signal input regulation stiffness of the tracking loop, chosen far below the array's dynamic resistance",
+          "inputRegulationBandVolts": 0.1,
+          "inputRegulationBandSource": "estimate:the error band of a hill-climbing tracker's input regulator, held well below its 0.5 V perturbation step",
+          "loopCurrentBandFraction": 0.02,
+          "loopCurrentFloorAmps": 0.0001,
+          "loopCurrentBandSource": "estimate:the width of the handover between the tracking, stage-voltage and charge-current loops as a fraction of the current where they meet, as on ref:victron-mppt-100-50; the floor keeps it defined at zero current",
+          "outputRegulationBandVolts": 0.6,
+          "outputRegulationSource": "estimate:about 1 % of the 57.6 V absorption target for a 48 V pack, the load regulation window the charge stage tapers across",
+          "outputRegulationResistanceSource": "estimate:output voltage regulation stiffness during absorption and float",
+          "negativeBondResistanceOhms": 0.0001,
+          "negativeBondSource": "estimate:internal negative bus bond of a non-isolated buck controller",
+          "tracking": {
+            "stepVolts": 0.5,
+            "intervalSeconds": 3,
+            "source": "estimate:a low-cost tracker perturbs in coarser steps and dwells longer than ref:victron-mppt-100-50; the perturb-and-observe scheme is that of ref:esram-chapman",
+            "maxIntegrationStepSeconds": 60,
+            "maxIntegrationStepSource": "derived:the tracker moves its reference by one stepVolts per call, so 60 s gives 1440 perturbations a day, worth 720 V of travel, against the roughly 20 V the maximum power point of a four-module string moves"
+          },
+          "stages": {
+            "absorbVoltagePer12V": 14.4,
+            "floatVoltagePer12V": 13.5,
+            "absorbHoldSeconds": 7200,
+            "tailCurrentFraction": 0.02,
+            "source": "ref:victron-mppt-100-50 LiFePO4 charge profile; ref:generic-100a-mppt has seven battery-type modes but publishes none of their set points"
+          }
+        },
+        "limits": {
+          "source": "estimate:the listing states no thermal or over-voltage limits",
+          "derateStartC": 40,
+          "derateEndC": 80,
+          "shutdownC": 90,
+          "derateSource": "estimate:the same derating band as ref:victron-mppt-100-50, set by the same silicon and capacitor temperatures",
+          "damageTemperatureC": 120,
+          "damageTemperatureSource": "estimate:printed-circuit assembly solder and capacitor limit",
+          "overVoltageDamageMultiple": 1.15,
+          "overVoltageDamageSource": "estimate:input capacitor voltage rating margin above the rated 150 V input"
+        },
+        "thermal": {
+          "nodes": {
+            "heatsink": {
+              "material": "aluminium",
+              "massKg": 4.5,
+              "surface": { "geometry": "verticalPlate", "areaM2": 0.5, "characteristicLengthM": 0.3, "forcedAirVelocityMPerS": 2.5, "fanOnTemperatureC": 45 }
+            }
+          },
+          "links": [],
+          "heatNode": "heatsink",
+          "source": "estimate:300 x 200 x 110 mm finned case with a temperature-controlled fan; the fins roughly double the bare box area of 0.26 m2"
+        }
+      }
+    },
+    {
+      "id": "battery-lifepo4-48v-100ah-golf",
+      "group": "battery",
+      "name": "48 V 100 Ah LiFePO4 golf cart pack",
+      "shortName": "Golf cart",
+      "description": "Sixteen LiFePO4 cells in series behind a 200 A BMS, in a sealed golf cart case.",
+      "gridSize": { "width": 5, "height": 3 },
+      "specifications": {
+        "Nominal voltage": "51.2 V",
+        "Capacity": "100 Ah / 5,120 Wh",
+        "Continuous discharge": "200 A",
+        "Peak discharge": "600 A",
+        "Supplied charger": "56.8 V / 18 A",
+        "Enclosure": "IP65",
+        "Mass": "47 kg"
+      },
+      "terminals": [
+        { "id": "positive", "label": "+", "role": "dc-positive", "domain": "dc", "edge": "right", "offset": 0.3 },
+        { "id": "negative", "label": "−", "role": "dc-negative", "domain": "dc", "edge": "right", "offset": 0.7, "reference": true }
+      ],
+      "model": {
+        "type": "battery",
+        "source": "ref:temgo-48v-100ah",
+        "electrical": {
+          "cellsInSeries": 16,
+          "nominalVoltage": 51.2,
+          "capacityAh": 100,
+          "startingStateOfCharge": 0.8,
+          "startingStateOfChargeSource": "assumption:new layouts start at 80 %",
+          "internalResistanceOhms": 0.03,
+          "internalResistanceSource": "derived:four times the 4S pack resistance for four times the series cell count, ref:lfp-internal-resistance",
+          "coulombicEfficiency": 0.99,
+          "openCircuitVoltageCurve": [
+            { "stateOfCharge": 0.0, "voltage": 40.0 },
+            { "stateOfCharge": 0.05, "voltage": 49.6 },
+            { "stateOfCharge": 0.1, "voltage": 51.2 },
+            { "stateOfCharge": 0.2, "voltage": 52.0 },
+            { "stateOfCharge": 0.4, "voltage": 52.4 },
+            { "stateOfCharge": 0.6, "voltage": 52.72 },
+            { "stateOfCharge": 0.8, "voltage": 53.12 },
+            { "stateOfCharge": 0.9, "voltage": 53.44 },
+            { "stateOfCharge": 0.95, "voltage": 54.08 },
+            { "stateOfCharge": 1.0, "voltage": 56.0 }
+          ],
+          "openCircuitVoltageCurveSource": "ref:lfp-ocv-typical for the same sixteen cells in series; the supplied 56.8 V charger of ref:temgo-48v-100ah sits just above the top of this curve, which is what lets it push current into a full pack",
+          "resistanceTemperatureFactors": [
+            { "temperatureC": -20, "factor": 4.0 },
+            { "temperatureC": 0, "factor": 2.0 },
+            { "temperatureC": 25, "factor": 1.0 },
+            { "temperatureC": 45, "factor": 0.85 }
+          ],
+          "resistanceStateOfChargeFactors": [
+            { "stateOfCharge": 0.0, "factor": 1.6 },
+            { "stateOfCharge": 0.2, "factor": 1.1 },
+            { "stateOfCharge": 0.5, "factor": 1.0 },
+            { "stateOfCharge": 0.9, "factor": 1.0 },
+            { "stateOfCharge": 1.0, "factor": 1.2 }
+          ],
+          "resistanceFactorSource": "ref:lfp-internal-resistance",
+          "capacityTemperatureFactors": [
+            { "temperatureC": -20, "factor": 0.7 },
+            { "temperatureC": 0, "factor": 0.85 },
+            { "temperatureC": 25, "factor": 1.0 },
+            { "temperatureC": 45, "factor": 1.02 }
+          ],
+          "capacityFadePerEquivalentCycle": 0.000067,
+          "capacityFadeSource": "derived:20 % capacity loss over 3000 equivalent full cycles, ref:lfp-cycle-life",
+          "contactorResistanceOhms": 0.001,
+          "contactorResistanceSource": "derived:a 200 A MOSFET bank carries about twice the die area of the 100 A rack pack's, so half its on-state resistance",
+          "chargeBlockedResistanceOhms": 10000,
+          "chargeBlockedResistanceSource": "estimate:with the charge MOSFET off, the only path into the pack is the BMS's own sense and balancing network, which is tens of kilohms"
+        },
+        "limits": {
+          "source": "ref:temgo-48v-100ah",
+          "overVoltageDisconnect": 58.4,
+          "overVoltageReconnect": 55.2,
+          "overVoltageSource": "derived:3.65 V per cell over sixteen cells, the standard LiFePO4 cell ceiling; the supplied 56.8 V charger stops below it",
+          "underVoltageDisconnect": 40.0,
+          "underVoltageReconnect": 48.0,
+          "underVoltageSource": "derived:2.5 V per cell over sixteen cells, ref:lfp-ocv-typical",
+          "chargeCurrentLimitAmps": 100,
+          "chargeCurrentSource": "estimate:the listing rates the BMS at 200 A discharge and states no charge limit; packs of this class hold charge to half the discharge rating, which the supplied 18 A charger stays well inside",
+          "dischargeCurrentLimitAmps": 200,
+          "overCurrentTripCurve": [
+            { "multiple": 1.05, "seconds": 600 },
+            { "multiple": 1.5, "seconds": 30 },
+            { "multiple": 2.0, "seconds": 5 },
+            { "multiple": 3.0, "seconds": 0.1 }
+          ],
+          "overCurrentTripCurveSource": "derived:ref:temgo-48v-100ah rates 200 A continuous and a 600 A peak, which is the 3x point; the intermediate points are the shape a MOSFET BMS follows between the two",
+          "highTemperatureDisconnectC": 60,
+          "highTemperatureReconnectC": 50,
+          "highTemperatureSource": "estimate:the cell manufacturer's discharge ceiling, the same as the rack pack of ref:battleborn-bb10012",
+          "protectionResponseSeconds": 0.05,
+          "protectionResponseSource": "estimate:a MOSFET BMS needs tens of milliseconds to detect an excursion and open the pack, which is deliberately slower than a fuse clearing a bolted fault",
+          "reconnectDelaySeconds": 60,
+          "reconnectDelaySource": "estimate:BMS lockout before reclosing, so a sagging pack cannot chatter",
+          "chargeLowTemperatureDisconnectC": 0,
+          "chargeLowTemperatureReconnectC": 5,
+          "chargeLowTemperatureSource": "ref:temgo-48v-100ah low-temperature protection blocks charging below freezing to prevent lithium plating; the 5 C reclose is estimated hysteresis",
+          "chargeResumeStateOfCharge": 0.98,
+          "chargeResumeSource": "estimate:the BMS terminates charge at the cell over-voltage limit and resumes once the pack has given a couple of percent back, which keeps a full pack from cycling its charge FET",
+          "damageTemperatureC": 90,
+          "damageTemperatureSource": "ref:lfp-thermal-runaway"
+        },
+        "thermal": {
+          "nodes": {
+            "cell": { "material": "lifepo4-cell", "massKg": 40, "runaway": true },
+            "case": {
+              "material": "mild-steel",
+              "massKg": 7,
+              "surface": { "geometry": "verticalPlate", "areaM2": 0.5, "characteristicLengthM": 0.23 }
+            }
+          },
+          "links": [
+            { "from": "cell", "to": "case", "conductanceWPerK": 12 }
+          ],
+          "heatNode": "cell",
+          "source": "estimate:520 x 270 x 230 mm sealed case, exposed area excludes the base; conductance scaled from the 4S pack by cell count"
+        }
+      }
+    },
+    {
+      "id": "inverter-48v-2500w",
+      "group": "inverter",
+      "name": "48 V 2.5 kW inverter, 110 V AC",
+      "shortName": "48 V 2.5 kW",
+      "description": "Low-cost high-frequency 48 volt inverter, 2,500 W continuous at 110 V AC.",
+      "gridSize": { "width": 6, "height": 4 },
+      "specifications": {
+        "DC input": "48 V (42–61 V)",
+        "AC output": "110 V / 60 Hz",
+        "Continuous": "2,500 W",
+        "Peak": "5,000 W",
+        "No-load draw": "25 W",
+        "Peak efficiency": "90 %",
+        "Outlets": "4 AC, USB and Type-C",
+        "Mass": "7 kg"
+      },
+      "terminals": [
+        { "id": "dc-positive", "label": "DC +", "role": "dc-positive", "domain": "dc", "edge": "left", "offset": 0.3 },
+        { "id": "dc-negative", "label": "DC −", "role": "dc-negative", "domain": "dc", "edge": "left", "offset": 0.7 },
+        { "id": "ac-line", "label": "AC L", "role": "ac-line", "domain": "ac", "edge": "right", "offset": 0.3 },
+        { "id": "ac-neutral", "label": "AC N", "role": "ac-neutral", "domain": "ac", "edge": "right", "offset": 0.7, "reference": true }
+      ],
+      "model": {
+        "type": "inverter",
+        "source": "ref:generic-48v-2500w-inverter",
+        "electrical": {
+          "nominalInputVoltage": 48,
+          "outputVoltage": 110,
+          "outputFrequencyHz": 60,
+          "continuousOutputWatts": 2500,
+          "peakOutputWatts": 5000,
+          "idleDrawWatts": 25,
+          "idleDrawSource": "estimate:1 % of rating, the no-load draw of a high-frequency bridge that also runs a display and USB outlets; ref:victron-multiplus manages 0.8 % with a better-controlled bridge",
+          "efficiencyCurve": [
+            { "loadFraction": 0.05, "efficiency": 0.79 },
+            { "loadFraction": 0.1, "efficiency": 0.85 },
+            { "loadFraction": 0.2, "efficiency": 0.885 },
+            { "loadFraction": 0.5, "efficiency": 0.9 },
+            { "loadFraction": 0.75, "efficiency": 0.895 },
+            { "loadFraction": 1.0, "efficiency": 0.88 }
+          ],
+          "efficiencyCurveSource": "estimate:the listing publishes no efficiency. A low-cost high-frequency 48 V bridge peaks near 90 %, five points below ref:victron-multiplus, and collapses below a tenth of rating where its fixed losses dominate",
+          "efficiencyTempCoefficientPerC": -0.0002,
+          "efficiencyTempCoefficientSource": "estimate:conduction losses rise with junction temperature, 0.02 efficiency points per 100 K",
+          "outputResistanceOhms": 0.073,
+          "outputResistanceSource": "derived:1.5 % output droop at the 2,500 W rating, which is 22.7 A at 110 V; looser than the regulated ref:victron-multiplus",
+          "outputRegulationBandVolts": 5.5,
+          "outputRegulationBandSource": "derived:+/- 5 % of 110 V, the window a low-cost inverter holds, against the 3 % of ref:victron-phoenix-1200",
+          "inputCapacitanceFarads": 0.0033,
+          "inputCapacitanceSource": "estimate:bulk input capacitance of a 2.5 kW 48 V bridge, 1.3 uF per watt of rating. It bypasses the switching frequency rather than the 120 Hz ripple, which the pack absorbs",
+          "inputBleedResistanceOhms": 100000,
+          "inputBleedSource": "estimate:discharge resistor across the DC input capacitor bank",
+          "bodyDiode": {
+            "saturationCurrentAmps": 1e-9,
+            "idealityFactor": 1.5,
+            "seriesResistanceOhms": 0.005,
+            "source": "estimate:two H-bridge MOSFET body diodes in series with the DC wiring, conducting on reverse polarity"
+          }
+        },
+        "limits": {
+          "source": "ref:generic-48v-2500w-inverter states an adjustable low-voltage cutoff for lithium packs but publishes no set points",
+          "underVoltageTrip": 42.0,
+          "underVoltageRestart": 48.0,
+          "underVoltageSource": "estimate:the factory lithium setting of this class, just above the 2.5 V per cell floor of a 16S pack, restarting at nominal",
+          "overVoltageTrip": 61.0,
+          "overVoltageRestart": 58.0,
+          "overVoltageSource": "estimate:above the 58.4 V a 16S pack reaches at full charge and below the 63 V rating of the input capacitors",
+          "restartDelaySeconds": 30,
+          "restartDelaySource": "estimate:typical restart lockout after a protective shutdown",
+          "overloadCurve": [
+            { "multiple": 1.05, "seconds": 300 },
+            { "multiple": 1.2, "seconds": 60 },
+            { "multiple": 1.5, "seconds": 10 },
+            { "multiple": 2.0, "seconds": 2 },
+            { "multiple": 2.2, "seconds": 0.5 }
+          ],
+          "overloadCurveSource": "derived:ref:generic-48v-2500w-inverter rates 2,500 W continuous and 5,000 W peak but states no time at peak. A low-cost bridge holds twice rating for a couple of seconds, not the minutes a transformer unit manages",
+          "derateStartC": 40,
+          "derateEndC": 75,
+          "shutdownC": 85,
+          "derateSource": "estimate:a fan-cooled aluminium case with no published derating curve; the band is narrower than ref:victron-multiplus because the heatsink is smaller",
+          "damageTemperatureC": 125,
+          "damageTemperatureSource": "estimate:electrolytic capacitor and solder limit",
+          "reversePolarityDamageJoules": 1200,
+          "reversePolarityDamageSource": "estimate:energy that destroys the H-bridge body diodes if no fuse clears first"
+        },
+        "thermal": {
+          "nodes": {
+            "heatsink": {
+              "material": "aluminium",
+              "massKg": 7,
+              "surface": { "geometry": "verticalPlate", "areaM2": 0.24, "characteristicLengthM": 0.33, "forcedAirVelocityMPerS": 3.0, "fanOnTemperatureC": 40 }
+            }
+          },
+          "links": [],
+          "heatNode": "heatsink",
+          "source": "estimate:330 x 250 x 130 mm case, exposed area excludes the mounting face, with two thermostatically switched fans"
         }
       }
     }

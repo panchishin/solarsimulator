@@ -78,6 +78,73 @@ export function wireTypeOptions(catalog) {
 }
 
 /**
+ * The system on the receipt: four 200 W modules in series into the 100 A tracker, the golf cart
+ * pack, and the 2.5 kW inverter running a fridge and two lamps.
+ *
+ * Positions are grid squares. Gauges follow the current each run has to carry: 10 AWG for a
+ * 10 A string, 6 AWG between tracker and pack, 2 AWG for the 52 A the inverter draws at rating
+ * and the 104 A it draws at peak, and lamp cord for the AC branch. Everything but the modules is
+ * marked indoors, which is where an installation puts it, and is what lets the pack charge on a
+ * winter morning: below freezing its BMS refuses charge.
+ */
+const DEFAULT_LAYOUT = {
+  components: [
+    { id: "panel-1", part: "pv-bifacial-200w", grid: [0, 0] },
+    { id: "panel-2", part: "pv-bifacial-200w", grid: [0, 4] },
+    { id: "panel-3", part: "pv-bifacial-200w", grid: [0, 8] },
+    { id: "panel-4", part: "pv-bifacial-200w", grid: [0, 12] },
+    { id: "controller", part: "controller-mppt-100a", grid: [7, 5], indoors: true },
+    { id: "pack", part: "battery-lifepo4-48v-100ah-golf", grid: [7, 10], indoors: true },
+    { id: "inverter", part: "inverter-48v-2500w", grid: [14, 5], indoors: true },
+    { id: "fridge", part: "load-fridge-120w", grid: [21, 10], indoors: true },
+    { id: "lamp-1", part: "load-led-10w", grid: [21, 1], indoors: true },
+    { id: "lamp-2", part: "load-led-10w", grid: [21, 5], indoors: true }
+  ],
+  wires: [
+    ["panel-1", "positive", "panel-2", "negative", "wire-cu-10awg-thhn"],
+    ["panel-2", "positive", "panel-3", "negative", "wire-cu-10awg-thhn"],
+    ["panel-3", "positive", "panel-4", "negative", "wire-cu-10awg-thhn"],
+    ["panel-4", "positive", "controller", "pv-positive", "wire-cu-10awg-thhn"],
+    ["panel-1", "negative", "controller", "pv-negative", "wire-cu-10awg-thhn"],
+    ["controller", "battery-positive", "pack", "positive", "wire-cu-6awg-thhn"],
+    ["controller", "battery-negative", "pack", "negative", "wire-cu-6awg-thhn"],
+    ["pack", "positive", "inverter", "dc-positive", "wire-cu-2awg-thhn"],
+    ["pack", "negative", "inverter", "dc-negative", "wire-cu-2awg-thhn"],
+    ["inverter", "ac-line", "fridge", "ac-line", "wire-cu-12awg-thhn"],
+    ["inverter", "ac-neutral", "fridge", "ac-neutral", "wire-cu-12awg-thhn"],
+    ["fridge", "ac-line", "lamp-1", "ac-line", "wire-cu-14awg-thhn"],
+    ["fridge", "ac-neutral", "lamp-1", "ac-neutral", "wire-cu-14awg-thhn"],
+    ["lamp-1", "ac-line", "lamp-2", "ac-line", "wire-cu-14awg-thhn"],
+    ["lamp-1", "ac-neutral", "lamp-2", "ac-neutral", "wire-cu-14awg-thhn"]
+  ]
+};
+
+/** The starter layout, checked against the catalog so a renamed part fails here and not later. */
+export function defaultCircuit(catalog) {
+  const components = DEFAULT_LAYOUT.components.map(({ id, part, grid, indoors }) => {
+    catalog.component(part);
+    return {
+      id,
+      componentId: part,
+      x: grid[0] * GRID_SIZE_PX,
+      y: grid[1] * GRID_SIZE_PX,
+      rotation: 0,
+      ...(indoors ? { indoors: true } : {})
+    };
+  });
+  const wires = DEFAULT_LAYOUT.wires.map(([from, fromTerminal, to, toTerminal, wireTypeId], i) => {
+    catalog.wireType(wireTypeId);
+    return {
+      id: `default-wire-${i + 1}`,
+      wireTypeId,
+      from: { componentId: from, terminalId: fromTerminal },
+      to: { componentId: to, terminalId: toTerminal }
+    };
+  });
+  return { components, wires };
+}
+
+/**
  * Drop anything the catalog no longer knows about. Saved layouts outlive catalog edits, and the
  * netlist rejects a join to a terminal that does not exist rather than silently ignoring it, so
  * the check belongs here where a stale layout can still be loaded.

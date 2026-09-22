@@ -8,6 +8,7 @@ import { catalog } from "../helpers/fixtures.js";
 import {
   GRID_SIZE_PX,
   createSession,
+  defaultCircuit,
   paletteGroups,
   paletteItems,
   sanitizeCircuit,
@@ -231,6 +232,38 @@ test("hazards arrive labelled by what the editor draws", () => {
       `insulation ${view.devices[feeder].insulationTemperatureC.toFixed(0)} C ` +
       `(rated ${view.devices[feeder].insulationRatingC} C) after ` +
       `${view.elapsedMinutes.toFixed(0)} min, hazard "${hazard.message}"`
+  );
+});
+
+test("the starter layout charges the pack and runs the fridge", () => {
+  const circuit = defaultCircuit(catalog);
+  const run = session(circuit);
+  assert.deepEqual(run.dropped, [], "the starter layout must not name a part the catalog lacks");
+  assert.equal(run.world.devices.length, circuit.components.length + circuit.wires.length);
+
+  const before = run.view();
+  assert.ok(before.totals.generatedWatts > 200, `array makes ${before.totals.generatedWatts} W`);
+
+  // An hour of a June morning: the array has to cover the loads and still put charge in.
+  const startCharge = before.devices.pack.stateOfCharge;
+  for (let minute = 0; minute < 60; minute += 1) run.advanceMinutes(1);
+  const view = run.view();
+  const pack = view.devices.pack;
+  const fridge = view.devices.fridge;
+
+  assert.ok(pack.stateOfCharge > startCharge, `pack went from ${startCharge} to ${pack.stateOfCharge}`);
+  assert.equal(pack.failure ?? "ok", "ok");
+  assert.equal(view.devices.inverter.failure ?? "ok", "ok");
+  assert.deepEqual(view.hazards, [], `starter layout raised ${JSON.stringify(view.hazards)}`);
+  // The fridge is the only duty-cycled load, so it is either running or resting, never nothing.
+  assert.ok(fridge.powerWatts >= 0);
+  assert.ok(view.devices["lamp-1"].powerWatts > 8, "a 10 W lamp on a 110 V inverter");
+  console.log(
+    `starter layout: array ${view.totals.generatedWatts.toFixed(0)} W, ` +
+      `loads ${view.totals.loadWatts.toFixed(0)} W, ` +
+      `pack ${(startCharge * 100).toFixed(1)}% -> ${(pack.stateOfCharge * 100).toFixed(1)}% ` +
+      `over ${view.elapsedMinutes.toFixed(0)} min, ` +
+      `panel cell ${view.devices["panel-1"].temperatureC.toFixed(0)} C`
   );
 });
 

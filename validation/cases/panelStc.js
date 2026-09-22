@@ -61,7 +61,8 @@ function moduleCurve(componentId, irradiance, cellC) {
 
 const PANELS = [
   { id: "pv-mono-300w", reference: "canadian-solar-cs6k-300ms", label: "CS6K-300MS" },
-  { id: "pv-mono-100w", reference: "renogy-100d", label: "RNG-100D" }
+  { id: "pv-mono-100w", reference: "renogy-100d", label: "RNG-100D" },
+  { id: "pv-bifacial-200w", reference: "aeternasol-200w-bifacial", label: "AeternaSol 200 W" }
 ];
 
 export default {
@@ -71,7 +72,9 @@ export default {
   claim:
     "1000 W/m2, 25 C cell. The extraction targets Pmp and is anchored to Isc and Voc, so those " +
     "should be tight; Vmp, Imp and the fill factor are what the fitted series and shunt " +
-    "resistances make them.",
+    "resistances make them. The AeternaSol module is a listing rather than a datasheet: only its " +
+    "200 W rating is published, so its rows check that the derived curve is self-consistent and " +
+    "extractable, not a vendor claim.",
   run() {
     const rows = [];
     for (const panel of PANELS) {

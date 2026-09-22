@@ -306,6 +306,11 @@ T_cell = T_amb + G_poa / (U0 + U1 · u_wind)
 Absorbed optical power for the conservation check is `G_poa · A · absorptance`; heat is that
 minus the electrical power leaving the module.
 
+`G_poa` is the irradiance on the front face only. A bifacial module is therefore modelled as
+the monofacial module it is from the front: the rear-side gain, which depends on the ground
+albedo and the mounting height behind the array, has no term here. A catalog entry for a
+bifacial part says so in its description rather than folding the gain into its rating.
+
 ## 6. Charge controller
 
 ### 6.1 Sense dividers
